@@ -1,0 +1,29 @@
+# Environment & Secrets
+.env
+*.env.local
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# IDE & Editor files
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+
+# Output datasets & temporary media
+/outputs/
+/temp/
+*.png
+*.jpg
+*.jpeg
+*.geojson
+master_gis_dataset.json
