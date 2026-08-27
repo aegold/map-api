@@ -203,6 +203,24 @@ report("sanitize_road_network([None]) returns [] without crash",
 report("sanitize_road_network(None) returns [] without crash",
        _srn(None) == [])
 
+# --- RECALL: short spurs & S/horseshoe curves survive smoothing + splitting --
+from core.spatial_engine import smooth_linestring_geometry
+
+short_spur_geom = _LS([(0, 0), (5, 3)])
+sm_spur = smooth_linestring_geometry(short_spur_geom)
+report("smooth_linestring_geometry keeps short 2-pt spur",
+       sm_spur is not None and sm_spur.length > 0
+       and list(sm_spur.coords)[0] == (0.0, 0.0))
+
+# Horseshoe / S path with few points survives process_topology parcel split.
+agri_full = [box(0, 0, 1000, 600)]
+s_curve = _LS([(0, 300), (150, 300), (300, 260), (450, 340), (600, 300)])
+split_s = process_topology(raw_water=[], raw_trees=[], raw_agri=agri_full,
+                           road_linestrings=[s_curve])
+report("process_topology splits along short S-curve (no crash, valid plots)",
+       all(p.is_valid and p.area > 0 for p in split_s["agri_plots"]),
+       f"plots={len(split_s['agri_plots'])}")
+
 
 # ------------------------------------------------------ JSON export --------
 roads_list = [

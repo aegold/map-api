@@ -157,14 +157,15 @@ from core.path_extractor import ROAD_EXTRACTION_PROMPT as P2_PROMPT
 from core.tile_segmentor import TILE_SEGMENTATION_PROMPT as P3_PROMPT
 
 report(
-    "S2 prompt: role/photogrammetry, TÂM ĐƯỜNG, forbidden 90-deg, curvature",
+    "S2 prompt: max-recall, TÂM ĐƯỜNG, forbidden 90-deg, continuity",
     P2_PROMPT.startswith("ROLE & OBJECTIVE:")
     and "TÂM ĐƯỜNG" in P2_PROMPT
     and "Photogrammetry Engineer" in P2_PROMPT
-    and "NO 90-DEGREE STEPS" in P2_PROMPT
-    and "Do NOT draw axis-aligned staircase steps" in P2_PROMPT
-    and "TANGENTIAL CONTINUITY" in P2_PROMPT
-    and "NEVER force-connect" in P2_PROMPT,
+    and "EVERY visible road" in P2_PROMPT
+    and "short dead-end spur trails" in P2_PROMPT
+    and "MAXIMUM RECALL" in P2_PROMPT
+    and "MAINTAIN the trajectory and bridge the gap" in P2_PROMPT
+    and "NO 90-DEGREE STEPS" in P2_PROMPT,
 )
 report(
     "S2 prompt: [y, x] integer 0-1000 grounding directive",

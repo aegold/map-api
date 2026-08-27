@@ -40,12 +40,12 @@ def expect_raises(fn):
 
 report("prompt embedded verbatim", ROAD_EXTRACTION_PROMPT.startswith(
     "ROLE & OBJECTIVE:") and "TÂM ĐƯỜNG" in ROAD_EXTRACTION_PROMPT)
-report("prompt: new cadastral + curvature directives",
+report("prompt: max-recall + continuity directives",
        all(k in ROAD_EXTRACTION_PROMPT for k in (
-           "Photogrammetry Engineer", "đường nhựa", "bờ mòn nội đồng",
-           "đường mòn đồi núi", "NO 90-DEGREE STEPS",
-           "Do NOT draw axis-aligned staircase steps",
-           "TANGENTIAL CONTINUITY", "20 to 60 waypoints", "[y, x]")))
+           "Photogrammetry Engineer", "EVERY visible road",
+           "short dead-end spur trails", "MAXIMUM RECALL",
+           "Do NOT omit faint", "MAINTAIN the trajectory and bridge the gap",
+           "NO 90-DEGREE STEPS", "20 to 60 waypoints", "`paths`", "[y, x]")))
 
 # ------------------------------------------------- input normalization -----
 W, H = 800, 600
@@ -226,6 +226,26 @@ far_b = LineString([(550, 500), (1000, 500)])
 merged_far = sanitize_road_network([far_a, far_b])
 report("sanitize: >tolerance gap NOT bridged", len(merged_far) == 2)
 report("sanitize: empty input safe", sanitize_road_network([]) == [])
+
+# --- RECALL: short dead-end spur trails (2-3 pts, ~5px) must survive -------
+spur_cases = [
+    (0, [[100, 100], [105, 102]]),        # 2-point ~5px spur
+    (1, [[100, 100], [104, 104], [108, 100]]),  # 3-point short spur
+]
+survived = True
+for pid, spur in spur_cases:
+    spur_res = GeminiRoadResult(paths=[
+        DetectedPath(path_id=pid, name="spur",
+                     centerline_1000=spur),
+    ])
+    spur_client = MockClient(spur_res)
+    sr, sg = extract_road_network(synthetic, spur_client, "m")
+    if len(sr) != 1 or len(sg) != 1:
+        survived = False
+    elif not (sg[0].is_valid and sg[0].length > 0):
+        survived = False
+report("recall: short 2-3pt spurs (~5px) are NOT dropped by pipeline",
+       survived)
 
 # --------------------------------------------------- error handling --------
 class BadClient(MockClient):

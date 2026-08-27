@@ -37,26 +37,24 @@ from core.spatial_engine import (
     smooth_open_linestring,
 )
 
-#: Embedded VLM prompt for the global transportation pass (cadastral grade).
+#: Embedded VLM prompt for the global transportation pass (max-recall cadastral).
 ROAD_EXTRACTION_PROMPT: str = """ROLE & OBJECTIVE:
 You are an expert Cadastral Remote Sensing Surveyor and Photogrammetry Engineer.
-Analyze this aerial image and trace the exact CENTERLINES (TÂM ĐƯỜNG) of all visible road networks, unpaved dirt tracks, ridge trails, and winding paths.
+Analyze this aerial image and trace the exact CENTERLINES (TÂM ĐƯỜNG) of EVERY visible road, dirt track, hairpin switchback, and pasture path.
 
-ROAD TYPES TO CAPTURE (bắt toàn bộ):
-- Paved / asphalt roads (đường nhựa), concrete roads (đường bê tông).
-- Sand / gravel roads (đường cát / sỏi), dirt roads (đường đất).
-- Field footpaths (bờ mòn nội đồng) and hill-mountain trails (đường mòn đồi núi).
-
-CRITICAL CURVATURE & NATURAL TRAJECTORY RULES:
-1. NATURAL FLUID TRAJECTORIES (NO 90-DEGREE STEPS):
-   - Rural, pasture, and mountain trails follow natural terrain contours and organic smooth curves.
-   - STRICTLY FORBIDDEN: Do NOT draw axis-aligned staircase steps, rectangular zig-zags, or artificial 90-degree right angles.
-2. TANGENTIAL CONTINUITY & DENSE WAYPOINTS:
-   - Place waypoints densely (20 to 60 waypoints per path) along the true continuous curvature tangent of the trail.
-   - For sweeping curves, hairpin turns, and S-bends, ensure smooth progressive angle transitions between consecutive vertices.
-3. DISCRETE & TERMINATING PATHS:
-   - STOP immediately when a trail tapers off into grass/woods or ends at a clearing. NEVER force-connect disconnected paths across slopes or dense forest gaps.
-4. COORDINATE SPACE:
+EXHAUSTIVE RECALL & CONTINUITY RULES:
+1. TRACE EVERY VISIBLE TRACK (MAXIMUM RECALL):
+   - You MUST extract all primary roads, winding mountain tracks, horseshoe loops, hairpin turns, and short dead-end spur trails.
+   - Do NOT omit faint, dusty, or narrow unpaved tracks traversing hillsides or pasture slopes.
+2. CONTINUITY THROUGH FAINT PATCHES & SHADOWS:
+   - When a track becomes slightly faint, dusty, or partially occluded by tree crowns (< 40 meters), MAINTAIN the trajectory and bridge the gap.
+   - Do NOT stop tracing prematurely if the road visibly continues past a shadow or bare dirt patch.
+3. ORGANIC SMOOTH CURVES (NO 90-DEGREE STEPS):
+   - Trace natural flowing curves with dense waypoints (20 to 60 waypoints per segment).
+   - STRICTLY FORBIDDEN: Do not draw staircase steps, axis-aligned right angles, or artificial zig-zags.
+4. DISCRETE BRANCHES:
+   - Separate distinct disconnected paths into individual items in the `paths` list.
+5. COORDINATE FORMAT:
    - Return ordered integer coordinates in normalized [y, x] space (0-1000 scale)."""
 
 ImageLike = Union[str, bytes, np.ndarray, Image.Image, SatelliteImage]
