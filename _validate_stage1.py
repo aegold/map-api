@@ -125,9 +125,16 @@ path_ok = DetectedPath(path_id=1, name="main road",
                        centerline_1000=[[int(round(i % 1000)), int(round(i * 499 / 20))]
                                         for i in range(24)])
 roads = GeminiRoadResult(paths=[path_ok])
-report("DetectedPath / GeminiRoadResult valid (dense 24 waypoints)",
-       roads.paths[0].name == "main road"
+report("DetectedPath / GeminiRoadResult valid", roads.paths[0].name == "main road"
        and len(roads.paths[0].centerline_1000) == 24)
+
+# Sparse paths (as returned by the real model) are valid too - no 20-point minimum.
+sparse_ok = DetectedPath(path_id=2, name="short track",
+                         centerline_1000=[[124, 650], [151, 622], [836, 461]])
+report("DetectedPath accepts sparse 3-point centerline", len(sparse_ok.centerline_1000) == 3)
+report("DetectedPath accepts single-segment (2-point) centerline",
+       len(DetectedPath(path_id=3, name="min",
+                        centerline_1000=[[566, 595], [478, 560]]).centerline_1000) == 2)
 
 feats = TileFeaturesExtraction(
     water_bodies=[SpatialPolygon(polygon_1000=ring(20))],
@@ -150,8 +157,7 @@ report("plain-JSON serializable (response_format ready)", True)
 report(
     "extra fields forbidden",
     expect_raises(lambda: DetectedPath(path_id=1, name="x",
-                                       centerline_1000=[[i * 8 % 1000, i * 5 % 1000]
-                                                        for i in range(20)],
+                                       centerline_1000=[[0, 0], [1, 1]],
                                        bogus="nope")),
 )
 

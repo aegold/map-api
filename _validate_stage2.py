@@ -144,13 +144,20 @@ client = MockClient(mocked)
 
 roads, geoms = extract_road_network(pil_img, client, config.DEFAULT_MODEL)
 
-# Schema audit: dense waypoint bounds enforced on DetectedPath.
-report("schema: <20 waypoints rejected", expect_raises(lambda: DetectedPath(
-    path_id=9, name="too short",
-    centerline_1000=[[i * 10, i * 10] for i in range(19)])))
-report("schema: >60 waypoints rejected", expect_raises(lambda: DetectedPath(
-    path_id=9, name="too long",
-    centerline_1000=[[i * 10 % 1000, i * 7 % 1000] for i in range(61)])))
+# Schema audit: any waypoint count is accepted (>= 2 only). Reproduces the
+# production 400 error: model returned 4..19 points -> must now be valid.
+report("schema: sparse 19-point path accepted",
+       not expect_raises(lambda: DetectedPath(
+           path_id=0, name="road",
+           centerline_1000=[[i * 50 % 1000, 500] for i in range(19)])))
+report("schema: 4-point path accepted (real production case)",
+       not expect_raises(lambda: DetectedPath(
+           path_id=0, name="road",
+           centerline_1000=[[566, 595], [478, 560], [413, 523], [362, 505]])))
+report("schema: <2 points still rejected",
+       expect_raises(lambda: DetectedPath(
+           path_id=9, name="degenerate",
+           centerline_1000=[[123, 123]])))
 
 kwargs = client.last_kwargs
 report(

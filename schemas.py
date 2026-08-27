@@ -65,8 +65,9 @@ class DetectedPath(BaseModel):
     centerline_1000: list[list[int]] = Field(
         ...,
         description=(
-            "Dense sequence of 20 to 60 waypoints [y, x] in 0-1000 scale, "
-            "ordered along the path (dense enough for switchbacks/S-curves)."
+            "Ordered polyline of [y, x] waypoints on a 0-1000 scale, "
+            "ordered along the path (any number of points; dense enough "
+            "only when the geometry requires switchbacks/S-curves)."
         ),
     )
 
@@ -88,8 +89,9 @@ class DetectedPath(BaseModel):
     @field_validator("centerline_1000")
     @classmethod
     def _validate_centerline(cls, v: list[list[int]]) -> list[list[int]]:
-        # Dense waypoint requirement: enough points to hug switchbacks.
-        return _validate_point_list(v, min_points=20, max_points=60)
+        # Any number of waypoints; a polyline only needs >= 2 points to be
+        # a valid segment. Dense-sampling density is not enforced by schema.
+        return _validate_point_list(v, min_points=2)
 
 
 class GeminiRoadResult(BaseModel):
