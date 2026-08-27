@@ -39,12 +39,13 @@ def expect_raises(fn):
 
 
 report("prompt embedded verbatim", ROAD_EXTRACTION_PROMPT.startswith(
-    "You are an expert Cadastral Remote Sensing Surveyor.") and "TÂM ĐƯỜNG" in ROAD_EXTRACTION_PROMPT)
-report("prompt: new cadastral directives",
+    "ROLE & OBJECTIVE:") and "TÂM ĐƯỜNG" in ROAD_EXTRACTION_PROMPT)
+report("prompt: new cadastral + curvature directives",
        all(k in ROAD_EXTRACTION_PROMPT for k in (
-           "đường nhựa", "bờ mòn nội đồng", "đường mòn đồi núi",
-           "NO BRIDGING GAPS", "hairpin bend and S-curve",
-           "20 to 60 waypoints", "[y, x]")))
+           "Photogrammetry Engineer", "đường nhựa", "bờ mòn nội đồng",
+           "đường mòn đồi núi", "NO 90-DEGREE STEPS",
+           "Do NOT draw axis-aligned staircase steps",
+           "TANGENTIAL CONTINUITY", "20 to 60 waypoints", "[y, x]")))
 
 # ------------------------------------------------- input normalization -----
 W, H = 800, 600

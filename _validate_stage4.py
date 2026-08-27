@@ -14,6 +14,7 @@ from core.spatial_engine import (
     chaikin_smooth,
     export_master_gis,
     process_topology,
+    smooth_open_linestring,
 )
 from utils.visualizer import render_master_overlay
 
@@ -62,6 +63,29 @@ report("iterations=0 returns rounded input", chaikin_smooth(sq, iterations=0) ==
 
 degenerate = chaikin_smooth([[0, 0], [10, 10]])
 report("degenerate ring (<3 pts) unchanged", degenerate == [[0, 0], [10, 10]])
+
+# ---------------------------------------------------- B-Spline smoothing ----
+# 90-degree staircase / Manhattan jagged path (the exact bug the task targets).
+zigzag = [[0, 0], [30, 0], [30, 30], [60, 30], [60, 60], [90, 60], [90, 90]]
+smooth_zz = smooth_open_linestring(zigzag)
+report(
+    "smooth_open_linestring: removes 90-deg staircase (more, curved points)",
+    len(smooth_zz) > len(zigzag),
+    f"len {len(zigzag)} -> {len(smooth_zz)}",
+)
+report(
+    "smooth_open_linestring: preserves original endpoints",
+    smooth_zz[0] == zigzag[0] and smooth_zz[-1] == zigzag[-1],
+    f"start={smooth_zz[0]}, end={smooth_zz[-1]}",
+)
+zz_ls = LineString([tuple(p) for p in smooth_zz])
+report("smoothed polyline is valid and non-empty",
+       zz_ls.is_valid and zz_ls.length > 0)
+report("smooth: short path (<100px) kept to modest point count",
+       len(smooth_open_linestring([[0, 0], [10, 0], [20, 5], [30, 0]], num_points=60)) <= 30)
+
+report("short (<4 pt) input returned unchanged",
+      smooth_open_linestring([[0, 0], [10, 10], [20, 5]]) == [[0, 0], [10, 10], [20, 5]])
 
 jagged = [[0, 0], [10, 0], [10, 10], [20, 10], [20, 20], [30, 20], [30, 30]]
 smoothed_jagged = chaikin_smooth(jagged, iterations=1)

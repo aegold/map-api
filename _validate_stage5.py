@@ -157,12 +157,14 @@ from core.path_extractor import ROAD_EXTRACTION_PROMPT as P2_PROMPT
 from core.tile_segmentor import TILE_SEGMENTATION_PROMPT as P3_PROMPT
 
 report(
-    "S2 prompt: persona, TÂM ĐƯỜNG, shoulders/edges ban, occlusion momentum",
-    P2_PROMPT.startswith("You are an expert Cadastral Remote Sensing Surveyor.")
+    "S2 prompt: role/photogrammetry, TÂM ĐƯỜNG, forbidden 90-deg, curvature",
+    P2_PROMPT.startswith("ROLE & OBJECTIVE:")
     and "TÂM ĐƯỜNG" in P2_PROMPT
-    and "shoulders" in P2_PROMPT and "medians" in P2_PROMPT
-    and "building occlusions" in P2_PROMPT
-    and "crossing lines" in P2_PROMPT,
+    and "Photogrammetry Engineer" in P2_PROMPT
+    and "NO 90-DEGREE STEPS" in P2_PROMPT
+    and "Do NOT draw axis-aligned staircase steps" in P2_PROMPT
+    and "TANGENTIAL CONTINUITY" in P2_PROMPT
+    and "NEVER force-connect" in P2_PROMPT,
 )
 report(
     "S2 prompt: [y, x] integer 0-1000 grounding directive",

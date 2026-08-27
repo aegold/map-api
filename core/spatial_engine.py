@@ -86,6 +86,78 @@ def chaikin_smooth(
     return smoothed
 
 
+def smooth_open_linestring(
+    coords: list[list[int]],
+    smoothing_factor: float = 3.0,
+    num_points: int = 60,
+) -> list[list[int]]:
+    """Smooth an open LineString via cubic parametric B-Spline interpolation.
+
+    Removes Manhattan-style right-angle staircase artifacts while preserving
+    the original first and last vertices exactly. Short paths (< 100 px) use
+    a reduced sample count to avoid point bloat.
+
+    Args:
+        coords: Ordered ``[x, y]`` pixel coordinates.
+        smoothing_factor: Scipy splprep smoothing (s = factor * len(pts)).
+        num_points: Target sample count for path length >= 100 px.
+
+    Returns:
+        Smoothed ``list[list[int]]``; degenerate inputs (< 4 unique points)
+        or interpolation failure are returned unchanged.
+    """
+    pts = np.array(coords, dtype=np.float64)
+    if len(pts) < 4:
+        return coords
+
+    # Drop consecutive duplicate / very-close points (< 1.5 px).
+    diff = np.sum(np.abs(np.diff(pts, axis=0)), axis=1)
+    unique_mask = np.ones(len(pts), dtype=bool)
+    unique_mask[1:] = diff > 1.5
+    pts = pts[unique_mask]
+    if len(pts) < 4:
+        return coords
+
+    try:
+        from scipy.interpolate import splprep, splev
+
+        k_degree = min(3, len(pts) - 1)
+        tck, u = splprep(
+            [pts[:, 0], pts[:, 1]], s=smoothing_factor * len(pts), k=k_degree
+        )
+        # Short roads (< 100 px) should not explode into many points.
+        length = LineString([tuple(p) for p in pts]).length
+        if length < 100.0:
+            target_pts = max(len(pts), 20)
+        else:
+            target_pts = max(len(pts), num_points)
+        u_fine = np.linspace(0, 1.0, target_pts)
+        x_new, y_new = splev(u_fine, tck)
+
+        # Preserve original endpoints.
+        x_new[0], y_new[0] = pts[0, 0], pts[0, 1]
+        x_new[-1], y_new[-1] = pts[-1, 0], pts[-1, 1]
+
+        return [[int(round(x)), int(round(y))] for x, y in zip(x_new, y_new)]
+    except Exception:
+        return coords
+
+
+def smooth_linestring_geometry(
+    line: LineString,
+    smoothing_factor: float = 3.0,
+    num_points: int = 60,
+) -> LineString:
+    """Return a B-Spline-smoothed copy of an open ``LineString``."""
+    if line is None or line.is_empty:
+        return line
+    pts = [[int(round(x)), int(round(y))] for x, y in line.coords]
+    smoothed = smooth_open_linestring(pts, smoothing_factor, num_points)
+    if len(smoothed) < 2:
+        return line
+    return LineString([tuple(p) for p in smoothed])
+
+
 def smooth_polygon_rings(
     poly: Polygon, iterations: int = CHAIKIN_ITERATIONS
 ) -> tuple[list[list[int]], list[list[list[int]]]]:
@@ -195,8 +267,13 @@ def process_topology(
     # --- Cadastral plot splitting along road corridors ----------------------
     road_lines = _to_linestrings(road_linestrings)
     if road_lines:
+        # Smooth each road with B-Spline so parcel-split cuts follow the
+        # natural curvature (no 90-degree staircase artifacts).
+        smoothed_roads = [
+            smooth_linestring_geometry(line) for line in road_lines
+        ]
         road_corridor_buffers = unary_union(
-            [line.buffer(config.ROAD_BUFFER_PX) for line in road_lines]
+            [line.buffer(config.ROAD_BUFFER_PX) for line in smoothed_roads]
         )
         split_agri = (
             clean_agri.difference(road_corridor_buffers)
@@ -327,6 +404,8 @@ __all__ = [
     "CHAIKIN_CUT_T",
     "chaikin_smooth",
     "smooth_polygon_rings",
+    "smooth_open_linestring",
+    "smooth_linestring_geometry",
     "extract_clean_polygons",
     "process_topology",
     "export_master_gis",

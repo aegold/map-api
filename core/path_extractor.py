@@ -32,25 +32,32 @@ from core.input_engine import (
     load_image,
     normalized_to_pixel,
 )
+from core.spatial_engine import (
+    _to_linestrings,  # noqa: F401 -- re-exported for sanitize_road_network
+    smooth_open_linestring,
+)
 
 #: Embedded VLM prompt for the global transportation pass (cadastral grade).
-ROAD_EXTRACTION_PROMPT: str = """You are an expert Cadastral Remote Sensing Surveyor.
-Analyze this aerial image and trace the exact CENTERLINES (TÂM ĐƯỜNG) of ALL visible transportation routes:
+ROAD_EXTRACTION_PROMPT: str = """ROLE & OBJECTIVE:
+You are an expert Cadastral Remote Sensing Surveyor and Photogrammetry Engineer.
+Analyze this aerial image and trace the exact CENTERLINES (TÂM ĐƯỜNG) of all visible road networks, unpaved dirt tracks, ridge trails, and winding paths.
 
 ROAD TYPES TO CAPTURE (bắt toàn bộ):
 - Paved / asphalt roads (đường nhựa), concrete roads (đường bê tông).
 - Sand / gravel roads (đường cát / sỏi), dirt roads (đường đất).
 - Field footpaths (bờ mòn nội đồng) and hill-mountain trails (đường mòn đồi núi).
 
-RULES:
-1. Place waypoints along the geometric CENTERLINE of each path - NEVER on shoulders, edges, or medians.
-2. DENSE SAMPLING: emit a high density of waypoints so the polyline hugs every hairpin bend and S-curve (switchbacks) exactly.
-3. LINEAR MOMENTUM: keep trajectories straight through tree shadows AND building occlusions (do NOT detour).
-4. NO BRIDGING GAPS: absolutely do NOT connect or bridge two separate road segments that are cut off by dense forest, steep hills, or slopes. STOP drawing immediately when the drivable surface ends.
-5. Intersecting paths must snap cleanly to the main road coordinates at junctions.
-6. DO NOT hallucinate paths or crossing lines across featureless plain agricultural plots / crop beds.
-
-OUTPUT FORMAT: for each path emit a dense sequence of 20 to 60 waypoints as ordered integer [y, x] pairs on a 0-1000 scale relative to the image."""
+CRITICAL CURVATURE & NATURAL TRAJECTORY RULES:
+1. NATURAL FLUID TRAJECTORIES (NO 90-DEGREE STEPS):
+   - Rural, pasture, and mountain trails follow natural terrain contours and organic smooth curves.
+   - STRICTLY FORBIDDEN: Do NOT draw axis-aligned staircase steps, rectangular zig-zags, or artificial 90-degree right angles.
+2. TANGENTIAL CONTINUITY & DENSE WAYPOINTS:
+   - Place waypoints densely (20 to 60 waypoints per path) along the true continuous curvature tangent of the trail.
+   - For sweeping curves, hairpin turns, and S-bends, ensure smooth progressive angle transitions between consecutive vertices.
+3. DISCRETE & TERMINATING PATHS:
+   - STOP immediately when a trail tapers off into grass/woods or ends at a clearing. NEVER force-connect disconnected paths across slopes or dense forest gaps.
+4. COORDINATE SPACE:
+   - Return ordered integer coordinates in normalized [y, x] space (0-1000 scale)."""
 
 ImageLike = Union[str, bytes, np.ndarray, Image.Image, SatelliteImage]
 
@@ -156,6 +163,11 @@ def extract_road_network(
         if len(pixels) < 2:
             # Degenerate polyline (all points collapsed); skip.
             continue
+        # B-Spline smoothing removes 90-degree staircase / Manhattan
+        # artifacts while preserving endpoints (see spatial_engine).
+        pixels = smooth_open_linestring(pixels)
+        if len(pixels) < 2:
+            continue
         geometry = LineString([tuple(p) for p in pixels])
         roads_list.append(
             {
@@ -189,8 +201,6 @@ def sanitize_road_network(
         List of snapped/merged ``LineString`` objects ready for Stage 4
         (always a list; empty when no valid input).
     """
-    from core.spatial_engine import _to_linestrings
-
     lines = _to_linestrings(road_lines)
     if not lines:
         return []
