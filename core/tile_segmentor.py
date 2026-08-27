@@ -31,12 +31,26 @@ from schemas import SpatialPolygon, TileFeaturesExtraction
 from core.input_engine import JPEG_QUALITY, encode_jpeg_base64
 
 #: Embedded VLM prompt used for every tile (cadastral grade).
-TILE_SEGMENTATION_PROMPT: str = """You are an expert Remote Sensing Semantic Segmentation Engine. Extract 3 core spatial layers:
-1. 'water_bodies': Closed polygons for all standing water, fish ponds, and aquaculture basins.
-2. 'tree_canopies': Dense concave polygons (20-45 vertices) tightly hugging tree crowns, orchards, and woodland belts. FULL FOREST COVERAGE RULE: if this tile is completely covered by dense forest, you MUST emit a polygon covering the ENTIRE forested area instead of treating it as background. Exclude roads and water.
-3. 'agricultural_zones': Polygons for active farming land. SEASONAL INVARIANCE is mandatory: include GREEN rice crops, YELLOW/STRAW ripe fields, PLOWED BROWN soil, AND muddy/flooded harvest paddies (RUỘNG ĐỔ ẢI / NGẬP NƯỚC). CRITICAL: do NOT confuse flooded harvest paddies with water bodies or fish ponds - flooded paddies belong to 'agricultural_zones'. STRICT EXCLUSIONS from agricultural zones: residential compounds, houses, brick/concrete yards (sân gạch / sân bê tông), and all roads.
+TILE_SEGMENTATION_PROMPT: str = """ROLE & OBJECTIVE:
+You are an expert Remote Sensing Semantic Segmentation Engine. Extract 3 core spatial layers within this tile:
 
-OUTPUT FORMAT: every polygon must be a closed loop of 20-45 vertices emitted as normalized integer [y, x] pairs on a 0-1000 scale relative to the tile."""
+1. 'water_bodies': 
+   - Closed polygons for permanent standing water: ponds, lakes, reservoirs, canals.
+
+2. 'tree_canopies': 
+   - Dense CONCAVE polygons (20-45 vertices) tightly hugging tree crowns, orchards, and woodland belts.
+   - FULL COVERAGE: If the tile contains dense contiguous forest, trace a complete polygon covering the forest area. Exclude roads and water.
+
+3. 'agricultural_zones' (STRICT CULTIVATED LAND ONLY):
+   - DEFINITION: Active MAN-MADE crop fields, cultivated plots, rice paddies, and organized farming beds.
+   - MANDATORY MORPHOLOGICAL SIGNS: Must show clear evidence of human agricultural division, such as parcel boundaries, terrace bunds/dikes, plowed furrows, row-crop patterns, or flooded paddy basins.
+   - STRICT EXCLUSIONS (DO NOT LABEL AS AGRICULTURAL):
+     * DO NOT label natural grassland, uncultivated pasture slopes, rolling green hills, wild meadows, or forest clearings lacking farming boundaries.
+     * DO NOT label residential compounds, dirt yards, or road surfaces.
+     * If an open green area has NO distinct parcel borders or farming texture, treat it as uncultivated terrain (DO NOT include in agricultural_zones).
+
+OUTPUT FORMAT:
+Return dense vertex sequences (20-45 points per polygon) in normalized [y, x] space (0-1000 scale)."""
 
 #: Headroom for worst-case structured output on dense tiles.
 MAX_COMPLETION_TOKENS: int = 8192

@@ -173,20 +173,31 @@ report(
 )
 report(
     "S3 prompt: persona, 3 layers, concave 20-45 vertices",
-    P3_PROMPT.startswith("You are an expert Remote Sensing Semantic Segmentation Engine.")
+    P3_PROMPT.startswith("ROLE & OBJECTIVE:")
+    and "Remote Sensing Semantic Segmentation Engine" in P3_PROMPT
     and all(k in P3_PROMPT for k in ("water_bodies", "tree_canopies", "agricultural_zones"))
-    and "concave polygons (20-45 vertices)" in P3_PROMPT,
+    and "CONCAVE polygons (20-45 vertices)" in P3_PROMPT,
 )
 report(
-    "S3 prompt: seasonal invariance (GREEN/YELLOW/flooded/PLOWED BROWN/ĐỔ ẢI)",
-    "GREEN" in P3_PROMPT and "YELLOW/STRAW" in P3_PROMPT
-    and "flooded" in P3_PROMPT and "ĐỔ ẢI" in P3_PROMPT
-    and "PLOWED BROWN" in P3_PROMPT,
+    "S3 prompt: strict agri morphology (cultivated land signs required)",
+    "STRICT CULTIVATED LAND ONLY" in P3_PROMPT
+    and "MAN-MADE crop fields" in P3_PROMPT
+    and all(k in P3_PROMPT for k in (
+        "parcel boundaries", "terrace bunds", "plowed furrows",
+        "row-crop patterns", "flooded paddy basins")),
 )
 report(
-    "S3 prompt: negative constraints (residential compounds, yards, roads)",
-    "residential compounds" in P3_PROMPT and "yards" in P3_PROMPT
-    and "roads" in P3_PROMPT,
+    "S3 prompt: false-positive grassland/pasture exclusion",
+    all(k in P3_PROMPT for k in (
+        "natural grassland", "uncultivated pasture slopes",
+        "rolling green hills", "wild meadows", "forest clearings",
+        "NO distinct parcel borders")),
+)
+report(
+    "S3 prompt: negative constraints (residential, dirt yards, road surfaces)",
+    "residential compounds" in P3_PROMPT
+    and "dirt yards" in P3_PROMPT
+    and "road surfaces" in P3_PROMPT,
 )
 report(
     "S3 prompt: [y, x] integer 0-1000 grounding directive",

@@ -37,8 +37,9 @@ def expect_raises(fn):
         return True
 
 
-report("prompt embedded verbatim", TILE_SEGMENTATION_PROMPT.startswith(
-    "You are an expert Remote Sensing Semantic Segmentation Engine."))
+report("prompt embedded verbatim",
+       TILE_SEGMENTATION_PROMPT.startswith("ROLE & OBJECTIVE:")
+       and "Remote Sensing Semantic Segmentation Engine" in TILE_SEGMENTATION_PROMPT)
 
 # --------------------------------------------------------- tile grid -------
 def covers_all(tiles, w, h, step=10):
