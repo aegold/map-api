@@ -78,7 +78,7 @@ ROAD_BUFFER_PX: float = float(os.getenv("ROAD_BUFFER_PX", "3.0"))
 # Minimum polygon area thresholds (pixels^2); smaller features are discarded.
 MIN_WATER_AREA: int = int(os.getenv("MIN_WATER_AREA", "80"))
 MIN_TREE_AREA: int = int(os.getenv("MIN_TREE_AREA", "120"))
-MIN_AGRI_AREA: int = int(os.getenv("MIN_AGRI_AREA", "600"))
+MIN_AGRI_AREA: int = int(os.getenv("MIN_AGRI_AREA", "400"))
 
 # ---------------------------------------------------------------------------
 # REST service settings (Stage 5)

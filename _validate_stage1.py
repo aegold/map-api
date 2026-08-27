@@ -53,7 +53,7 @@ try:
     assert config.ROAD_BUFFER_PX == 3.0
     assert config.MIN_WATER_AREA == 80
     assert config.MIN_TREE_AREA == 120
-    assert config.MIN_AGRI_AREA == 600
+    assert config.MIN_AGRI_AREA == 400
     report("config values match spec", True)
 except AssertionError as e:
     report("config values match spec", False, e)
@@ -121,9 +121,13 @@ def non_pair_point():
 report("out-of-range coordinate rejected", expect_raises(oob_polygon))
 report("malformed point rejected", expect_raises(non_pair_point))
 
-path_ok = DetectedPath(path_id=1, name="main road", centerline_1000=[[0, 0], [500, 500], [1000, 999]])
+path_ok = DetectedPath(path_id=1, name="main road",
+                       centerline_1000=[[int(round(i % 1000)), int(round(i * 499 / 20))]
+                                        for i in range(24)])
 roads = GeminiRoadResult(paths=[path_ok])
-report("DetectedPath / GeminiRoadResult valid", roads.paths[0].name == "main road")
+report("DetectedPath / GeminiRoadResult valid (dense 24 waypoints)",
+       roads.paths[0].name == "main road"
+       and len(roads.paths[0].centerline_1000) == 24)
 
 feats = TileFeaturesExtraction(
     water_bodies=[SpatialPolygon(polygon_1000=ring(20))],
@@ -145,7 +149,10 @@ report("plain-JSON serializable (response_format ready)", True)
 
 report(
     "extra fields forbidden",
-    expect_raises(lambda: DetectedPath(path_id=1, name="x", centerline_1000=[[0, 0], [1, 1]], bogus="nope")),
+    expect_raises(lambda: DetectedPath(path_id=1, name="x",
+                                       centerline_1000=[[i * 8 % 1000, i * 5 % 1000]
+                                                        for i in range(20)],
+                                       bogus="nope")),
 )
 
 # ------------------------------------------------------- coordinate math ----

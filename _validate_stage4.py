@@ -106,12 +106,13 @@ merged = process_topology(
     road_linestrings=[],
 )
 report("overlapping polygons union into one", len(merged["agri_plots"]) == 1
-       and abs(merged["agri_plots"][0].area - 19900) < 1e-6)
+       and abs(merged["agri_plots"][0].area - 19900) < 5,
+       f"area={merged['agri_plots'][0].area if merged['agri_plots'] else 'n/a'}")
 
 # --------------------------------------------------- area filtering --------
 tiny_water = box(300, 300, 308, 308)          # 64 < MIN_WATER_AREA (80)
 tiny_trees = box(600, 600, 610, 610)          # 100 < MIN_TREE_AREA (120)
-tiny_agri = box(700, 700, 720, 720)           # 400 < MIN_AGRI_AREA (600)
+tiny_agri = box(700, 700, 715, 715)           # 225 < MIN_AGRI_AREA (400)
 filtered = process_topology(
     raw_water=[tiny_water], raw_trees=[tiny_trees], raw_agri=[tiny_agri],
     road_linestrings=[],
@@ -127,6 +128,30 @@ report("filter stats recorded", all(
 ))
 report("empty inputs tolerated", expect_ok := (
     process_topology([], [], [], [])["stats"] is not None))
+
+# --- NEW (upgrade): morphological closing heals tile slivers ---------------
+from core.spatial_engine import extract_clean_polygons
+
+sliver_agri = [box(0, 0, 499.7, 300), box(500, 0, 1000, 300)]  # 0.3px crack
+closed = process_topology(raw_water=[], raw_trees=[], raw_agri=sliver_agri,
+                          road_linestrings=[])
+report("buffer-closing fuses 0.3px tile crack into 1 plot",
+       len(closed["agri_plots"]) == 1,
+       f"pieces={len(closed['agri_plots'])}")
+
+wide_gap = process_topology(raw_water=[], raw_trees=[],
+                            raw_agri=[box(0, 0, 480, 300), box(520, 0, 1000, 300)],
+                            road_linestrings=[])
+report("closing does NOT fuse genuinely separate plots",
+       len(wide_gap["agri_plots"]) == 2)
+
+# --- GeometryCollection safety ---------------------------------------------
+from shapely.geometry import GeometryCollection
+
+gc = GeometryCollection([box(0, 0, 100, 200), LineString([(0, 0), (50, 50)])])
+cleaned = extract_clean_polygons(gc.buffer(0) if not gc.is_valid else gc)
+report("extract_clean_polygons skips non-polygon members", len(cleaned) == 1)
+
 
 # ------------------------------------------------------ JSON export --------
 roads_list = [

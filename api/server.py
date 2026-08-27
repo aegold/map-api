@@ -33,8 +33,17 @@ from contracts import (
     MasterGISPayload,
     PathsExtractionPayload,
     PolygonFeature,
+    PolygonGeometry,
     RoadFeature,
 )
+from core.input_engine import load_image
+from core.path_extractor import extract_road_network, sanitize_road_network
+from core.spatial_engine import (
+    CHAIKIN_ITERATIONS,
+    process_topology,
+    smooth_polygon_rings,
+)
+from core.tile_segmentor import run_tiling_segmentation
 from schemas import GeminiRoadResult, TileFeaturesExtraction
 from utils.visualizer import (
     numpy_image_to_base64,
@@ -42,14 +51,6 @@ from utils.visualizer import (
     render_geo_cleaned_preview,
     render_master_overlay,
     render_stage2_preview,
-)
-from core.input_engine import load_image
-from core.path_extractor import extract_road_network
-from core.tile_segmentor import run_tiling_segmentation
-from core.spatial_engine import (
-    CHAIKIN_ITERATIONS,
-    chaikin_smooth,
-    process_topology,
 )
 
 logger = logging.getLogger("stage5_api")
@@ -105,18 +106,22 @@ def _extract_paths_pipeline(image_bytes: bytes, model_id: str) -> dict:
 def _polygon_features(polygons, prefix: str) -> list[PolygonFeature]:
     """Convert cleaned Shapely polygons to Chaikin-smoothed features.
 
-    The emitted ``polygon_pixel`` ring is the exact geometry rendered in the
-    preview, keeping JSON and visualization strictly consistent.
+    Preserves interior hole rings (e.g. punched-out water inside tree
+    canopies). The emitted ``geometry.exterior`` / ``interiors`` rings are
+    the exact geometry rendered in the preview, keeping JSON and
+    visualization strictly consistent.
     """
     feats = []
     for i, poly in enumerate(
         sorted(polygons, key=lambda p: p.area, reverse=True), start=1
     ):
-        xs, ys = poly.exterior.xy
-        raw_ring = [[int(round(x)), int(round(y))]
-                    for x, y in zip(xs[:-1], ys[:-1])]
-        ring = chaikin_smooth(raw_ring, iterations=CHAIKIN_ITERATIONS)
-        feats.append(PolygonFeature(feature_id=i, polygon_pixel=ring))
+        exterior, interiors = smooth_polygon_rings(
+            poly, iterations=CHAIKIN_ITERATIONS
+        )
+        feats.append(PolygonFeature(
+            plot_id=i,
+            geometry=PolygonGeometry(exterior=exterior, interiors=interiors),
+        ))
     return feats
 
 
@@ -149,12 +154,10 @@ def _extract_geo_pipeline(image_bytes: bytes, model_id: str) -> dict:
     layers = {
         "water_bodies": water,
         "tree_canopies": trees,
-        "agricultural_zones": agri,
+        "agricultural_plots": agri,
     }
 
-    fig = render_geo_cleaned_preview(
-        np.asarray(sat_img.rgb_array), layers, hole_polys=topo["trees"]
-    )
+    fig = render_geo_cleaned_preview(np.asarray(sat_img.rgb_array), layers)
     preview_b64 = _preview_b64(fig)
 
     return {
@@ -179,6 +182,8 @@ def _master_pipeline(image_bytes: bytes, model_id: str) -> dict:
     raw_polygons = run_tiling_segmentation(
         np.asarray(sat_img.rgb_array), client, model_id
     )
+    # Snap-junction repair before handing roads to the spatial engine.
+    road_geoms = sanitize_road_network(road_geoms)
     topo = process_topology(
         raw_polygons["water_bodies"],
         raw_polygons["tree_canopies"],

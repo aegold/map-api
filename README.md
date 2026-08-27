@@ -116,7 +116,7 @@ ROAD_BUFFER_PX=3.0
 # Area Filter Thresholds (Pixel Area)
 MIN_WATER_AREA=80
 MIN_TREE_AREA=120
-MIN_AGRI_AREA=600
+MIN_AGRI_AREA=400
 
 # Server Configuration
 HOST=0.0.0.0
@@ -280,13 +280,12 @@ Mọi phản hồi đều bọc trong phong bì chuẩn `APIResponse[T]` (`contr
     ],
     "agricultural_plots": [
       {
-        "feature_id": 1,
-        // Vòng kín các đỉnh [x, y] pixel (đã Chaikin-smoothed)
-        "polygon_pixel": [
-          [100, 100],
-          [140, 102],
-          [180, 110],
-        ],
+        "plot_id": 1,
+        // Vòng ngoài + lỗ thủng [x, y] pixel (đã Chaikin-smoothed, bảo toàn interiors)
+        "geometry": {
+          "exterior": [[100, 100], [140, 102], [180, 110], [100, 100]],
+          "interiors": []
+        },
       },
     ],
     "tree_canopies": [

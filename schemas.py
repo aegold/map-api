@@ -21,8 +21,10 @@ MIN_POLYGON_VERTICES: int = 20
 MAX_POLYGON_VERTICES: int = 45
 
 
-def _validate_point_list(value: list[list[int]], min_points: int = 3) -> list[list[int]]:
-    """Shared validator for lists of ``[y, x]`` integer coordinate pairs."""
+def _validate_point_list(
+    value: list[list[int]], min_points: int = 3, max_points: int | None = None
+) -> list[list[int]]:
+    """Validate a list of ``[y, x]`` integer coordinate pairs (0-1000 scale)."""
     cleaned: list[list[int]] = []
     for idx, point in enumerate(value):
         if not isinstance(point, (list, tuple)) or len(point) != 2:
@@ -41,14 +43,19 @@ def _validate_point_list(value: list[list[int]], min_points: int = 3) -> list[li
         raise ValueError(
             f"Expected at least {min_points} points, got {len(cleaned)}"
         )
+    if max_points is not None and len(cleaned) > max_points:
+        raise ValueError(
+            f"Expected at most {max_points} points, got {len(cleaned)}"
+        )
     return cleaned
 
 
 class DetectedPath(BaseModel):
     """A single road/path centerline detected inside a tile.
 
-    ``centerline_1000`` is an ordered polyline of ``[y, x]`` points on the
-    0-1000 normalized scale, ordered from one end of the path to the other.
+    ``centerline_1000`` is a **dense** ordered polyline of ``[y, x]`` points
+    on the 0-1000 normalized scale (20-60 waypoints) — dense enough to hug
+    hairpin bends / S-curves — ordered from one end of the path to the other.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -57,7 +64,10 @@ class DetectedPath(BaseModel):
     name: str = Field(..., description="Human-readable label of the path (e.g. 'highway', 'dirt track').")
     centerline_1000: list[list[int]] = Field(
         ...,
-        description="Ordered centerline vertices as [y, x] pairs on a 0-1000 scale.",
+        description=(
+            "Dense sequence of 20 to 60 waypoints [y, x] in 0-1000 scale, "
+            "ordered along the path (dense enough for switchbacks/S-curves)."
+        ),
     )
 
     @field_validator("path_id")
@@ -78,8 +88,8 @@ class DetectedPath(BaseModel):
     @field_validator("centerline_1000")
     @classmethod
     def _validate_centerline(cls, v: list[list[int]]) -> list[list[int]]:
-        # A centerline needs at least 2 points to define a segment.
-        return _validate_point_list(v, min_points=2)
+        # Dense waypoint requirement: enough points to hug switchbacks.
+        return _validate_point_list(v, min_points=20, max_points=60)
 
 
 class GeminiRoadResult(BaseModel):

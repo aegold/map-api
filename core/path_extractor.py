@@ -21,6 +21,7 @@ from typing import Any, Sequence, Union
 import numpy as np
 from PIL import Image
 from shapely.geometry import LineString
+from shapely.ops import linemerge, snap, unary_union
 
 import config
 from schemas import DetectedPath, GeminiRoadResult
@@ -32,17 +33,24 @@ from core.input_engine import (
     normalized_to_pixel,
 )
 
-#: Embedded VLM prompt for the global transportation pass.
+#: Embedded VLM prompt for the global transportation pass (cadastral grade).
 ROAD_EXTRACTION_PROMPT: str = """You are an expert Cadastral Remote Sensing Surveyor.
-Analyze this aerial image and trace the exact CENTERLINES (TÂM ĐƯỜNG) of all visible road networks, canal dikes, and field paths:
+Analyze this aerial image and trace the exact CENTERLINES (TÂM ĐƯỜNG) of ALL visible transportation routes:
+
+ROAD TYPES TO CAPTURE (bắt toàn bộ):
+- Paved / asphalt roads (đường nhựa), concrete roads (đường bê tông).
+- Sand / gravel roads (đường cát / sỏi), dirt roads (đường đất).
+- Field footpaths (bờ mòn nội đồng) and hill-mountain trails (đường mòn đồi núi).
 
 RULES:
-1. Trace visible primary thoroughfares, canal dike corridors, and agricultural ridge paths.
-2. Place waypoints along the geometric CENTERLINE of the path - NEVER on shoulders, road edges, or medians.
-3. Maintain strict linear momentum: continue trajectories directly and straight through tree shadows AND building occlusions (do NOT detour).
-4. Intersecting paths must snap cleanly to the main road coordinates.
-5. DO NOT hallucinate paths or crossing lines across featureless plain agricultural plots / crop beds.
-6. Output ONLY normalized integer vertices as ordered [y, x] pairs on a 0-1000 scale relative to the image."""
+1. Place waypoints along the geometric CENTERLINE of each path - NEVER on shoulders, edges, or medians.
+2. DENSE SAMPLING: emit a high density of waypoints so the polyline hugs every hairpin bend and S-curve (switchbacks) exactly.
+3. LINEAR MOMENTUM: keep trajectories straight through tree shadows AND building occlusions (do NOT detour).
+4. NO BRIDGING GAPS: absolutely do NOT connect or bridge two separate road segments that are cut off by dense forest, steep hills, or slopes. STOP drawing immediately when the drivable surface ends.
+5. Intersecting paths must snap cleanly to the main road coordinates at junctions.
+6. DO NOT hallucinate paths or crossing lines across featureless plain agricultural plots / crop beds.
+
+OUTPUT FORMAT: for each path emit a dense sequence of 20 to 60 waypoints as ordered integer [y, x] pairs on a 0-1000 scale relative to the image."""
 
 ImageLike = Union[str, bytes, np.ndarray, Image.Image, SatelliteImage]
 
@@ -162,9 +170,43 @@ def extract_road_network(
     return roads_list, geometries
 
 
+def sanitize_road_network(
+    road_lines: Sequence[LineString], snap_tolerance: float = 12.0
+):
+    """Close small gaps at junctions before handing roads to Stage 4.
+
+    Iteratively snaps each line's nodes onto the union of previously
+    processed lines within ``snap_tolerance`` pixels, then merges everything.
+    This repairs open T/X junctions (ngã ba / ngã tư bị hở) caused by
+    per-path extraction.
+
+    Args:
+        road_lines: Extracted road ``LineString`` objects in pixel space.
+        snap_tolerance: Maximum snapping distance in pixels (default 12.0).
+
+    Returns:
+        List of snapped/merged ``LineString`` objects ready for Stage 4
+        (empty list when no valid input).
+    """
+    lines = [line for line in road_lines if line is not None and not line.is_empty]
+    if not lines:
+        return []
+    if len(lines) == 1:
+        return [lines[0]]
+
+    snapped = [lines[0]]
+    for line in lines[1:]:
+        reference = unary_union(snapped)
+        snapped.append(snap(line, reference, snap_tolerance))
+    merged = linemerge(unary_union(snapped))
+    pieces = list(getattr(merged, "geoms", [merged])) or list(snapped)
+    return [p for p in pieces if not p.is_empty]
+
+
 __all__ = [
     "ROAD_EXTRACTION_PROMPT",
     "ImageLike",
     "MAX_COMPLETION_TOKENS",
     "extract_road_network",
+    "sanitize_road_network",
 ]

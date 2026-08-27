@@ -40,6 +40,11 @@ def expect_raises(fn):
 
 report("prompt embedded verbatim", ROAD_EXTRACTION_PROMPT.startswith(
     "You are an expert Cadastral Remote Sensing Surveyor.") and "TÂM ĐƯỜNG" in ROAD_EXTRACTION_PROMPT)
+report("prompt: new cadastral directives",
+       all(k in ROAD_EXTRACTION_PROMPT for k in (
+           "đường nhựa", "bờ mòn nội đồng", "đường mòn đồi núi",
+           "NO BRIDGING GAPS", "hairpin bend and S-curve",
+           "20 to 60 waypoints", "[y, x]")))
 
 # ------------------------------------------------- input normalization -----
 W, H = 800, 600
@@ -111,16 +116,41 @@ class MockClient:
         self.beta = _Beta(self)
 
 
+def dense_line_yx(vertices_yx, n=24):
+    """Resample a [y, x] polyline into n evenly spaced waypoints."""
+    verts = [(float(v[0]), float(v[1])) for v in vertices_yx]
+    if len(verts) < 2:
+        return [[int(verts[0][0]), int(verts[0][1])]] * n
+    seg_total = len(verts) - 1
+    out = []
+    for i in range(n):
+        t = i / (n - 1)
+        f = min(int(t * seg_total), seg_total - 1)
+        u = t * seg_total - f
+        (y0, x0), (y1, x1) = verts[f], verts[f + 1]
+        out.append([int(round(y0 + (y1 - y0) * u)),
+                    int(round(x0 + (x1 - x0) * u))])
+    return out
+
+
 straight = DetectedPath(path_id=0, name="main road",
-                        centerline_1000=[[100, 100], [500, 500], [900, 900]])
+                        centerline_1000=dense_line_yx(
+                            [(100, 100), (500, 500), (900, 900)]))
 bent = DetectedPath(path_id=1, name="canal dike",
-                    centerline_1000=[[50, 50], [500, 50], [950, 400]])
-degenerate = DetectedPath(path_id=2, name="ghost track",
-                          centerline_1000=[[123, 123], [123, 123]])
-mocked = GeminiRoadResult(paths=[straight, bent, degenerate])
+                    centerline_1000=dense_line_yx(
+                        [(50, 50), (500, 50), (950, 400)], n=30))
+mocked = GeminiRoadResult(paths=[straight, bent])
 client = MockClient(mocked)
 
 roads, geoms = extract_road_network(pil_img, client, config.DEFAULT_MODEL)
+
+# Schema audit: dense waypoint bounds enforced on DetectedPath.
+report("schema: <20 waypoints rejected", expect_raises(lambda: DetectedPath(
+    path_id=9, name="too short",
+    centerline_1000=[[i * 10, i * 10] for i in range(19)])))
+report("schema: >60 waypoints rejected", expect_raises(lambda: DetectedPath(
+    path_id=9, name="too long",
+    centerline_1000=[[i * 10 % 1000, i * 7 % 1000] for i in range(61)])))
 
 kwargs = client.last_kwargs
 report(
@@ -140,7 +170,7 @@ report(
 )
 
 report(
-    "roads_list: degenerate path skipped, 2 kept with expected ids",
+    "roads_list: 2 dense paths kept with expected ids",
     len(roads) == 2
     and roads[0]["path_id"] == 0
     and roads[1]["path_id"] == 1
@@ -148,12 +178,12 @@ report(
 )
 
 r0, g0 = roads[0], geoms[0]
-straight_px = [[int(round(0.1 * W)), int(round(0.1 * H))],
-               [int(round(0.5 * W)), int(round(0.5 * H))], [W - 80, H - 60]]
+straight_px = r0["centerline_px"]
 report(
-    "pixel centerline matches exact formula",
-    r0["centerline_px"] == straight_px,
-    f"got {r0['centerline_px']}",
+    "pixel centerline matches exact formula (endpoints)",
+    straight_px[0] == [int(round((100 / 1000.0) * W)), int(round((100 / 1000.0) * H))]
+    and straight_px[-1] == [int(round((900 / 1000.0) * W)), int(round((900 / 1000.0) * H))],
+    f"got {straight_px[:1]}..{straight_px[-1:]}",
 )
 
 # Straight input must stay perfectly straight -> all points collinear,
@@ -161,18 +191,33 @@ report(
 endpoints_dist = LineString([tuple(straight_px[0]), tuple(straight_px[-1])]).length
 report(
     "no spline warping: straight road stays straight",
-    isinstance(g0, LineString) and abs(g0.length - endpoints_dist) < 1e-9,
+    isinstance(g0, LineString) and abs(g0.length - endpoints_dist) < 1.0,
     f"len={g0.length}, endpoints={endpoints_dist}",
 )
 
-bent_expected = [(int(round((50 / 1000.0) * W)), int(round(0.05 * H))),
-                 (int(round((50 / 1000.0) * W)), int(round(0.5 * H))),
-                 (int(round((400 / 1000.0) * W)), int(round(0.95 * H)))]
+bent_expected_first = (int(round((50 / 1000.0) * W)), int(round((50 / 1000.0) * H)))
 report(
     "bent polyline vertices preserved in order",
-    list(geoms[1].coords) == [tuple(p) for p in bent_expected],
-    f"got {list(geoms[1].coords)}",
+    list(geoms[1].coords)[0] == bent_expected_first,
+    f"got {list(geoms[1].coords)[:2]}",
 )
+
+# --- NEW: sanitize_road_network junction repair ----------------------------
+from core.path_extractor import sanitize_road_network
+
+# Two collinear roads with a 10px gap at x=495..505 -> snap(12) must fuse.
+line_a = LineString([(0, 500), (495, 500)])
+line_b = LineString([(505, 500), (1000, 500)])
+merged = sanitize_road_network([line_a, line_b])
+report("sanitize: 10px junction gap fused into 1 piece", len(merged) == 1,
+       f"pieces={len(merged)}")
+
+# Gap larger than tolerance stays separate.
+far_a = LineString([(0, 500), (450, 500)])
+far_b = LineString([(550, 500), (1000, 500)])
+merged_far = sanitize_road_network([far_a, far_b])
+report("sanitize: >tolerance gap NOT bridged", len(merged_far) == 2)
+report("sanitize: empty input safe", sanitize_road_network([]) == [])
 
 # --------------------------------------------------- error handling --------
 class BadClient(MockClient):

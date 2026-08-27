@@ -94,14 +94,17 @@ class SmartMockClient:
     def __init__(self):
         self.calls = []
         self.tile_calls = 0
+        dense_centerline = [
+            [int(round(i * (1000 / 23))), 500] for i in range(24)  # 24 dense [y,x]
+        ]
         self.roads_result = GeminiRoadResult(paths=[
             DetectedPath(path_id=0, name="main road",
-                         centerline_1000=[[0, 500], [1000, 500]]),
+                         centerline_1000=dense_centerline),
         ])
         self.tile_results = [
             TileFeaturesExtraction(
-                water_bodies=[SpatialPolygon(polygon_1000=ring_circle(500, 300, 120))],
-                tree_canopies=[SpatialPolygon(polygon_1000=ring_circle(250, 700, 90))],
+                water_bodies=[SpatialPolygon(polygon_1000=ring_circle(500, 500, 100))],
+                tree_canopies=[SpatialPolygon(polygon_1000=ring_circle(500, 500, 480))],
                 agricultural_zones=[SpatialPolygon(polygon_1000=ring_rect(50, 50, 950, 950))],
             ),
             TileFeaturesExtraction(
@@ -172,9 +175,9 @@ report(
     and "concave polygons (20-45 vertices)" in P3_PROMPT,
 )
 report(
-    "S3 prompt: seasonal invariance (GREEN/YELLOW/MUDDY-FLOODED/PLOWED BROWN)",
+    "S3 prompt: seasonal invariance (GREEN/YELLOW/flooded/PLOWED BROWN/ĐỔ ẢI)",
     "GREEN" in P3_PROMPT and "YELLOW/STRAW" in P3_PROMPT
-    and "MUDDY/FLOODED" in P3_PROMPT and "đổ ải" in P3_PROMPT
+    and "flooded" in P3_PROMPT and "ĐỔ ẢI" in P3_PROMPT
     and "PLOWED BROWN" in P3_PROMPT,
 )
 report(
@@ -210,14 +213,16 @@ report("paths: contract payload keys", set(d.keys()) == {
     "summary", "paths", "preview_image_base64"}, str(set(d.keys())))
 report("paths: summary counts",
        d.get("summary", {}).get("path_count") == 1
-       and d["summary"]["total_waypoints"] == 2,
+       and d["summary"]["total_waypoints"] >= 20,
        str(d.get("summary")))
 road0 = (d.get("paths") or [{}])[0]
-report("paths: RoadFeature with int id + mapped centerline",
+report("paths: RoadFeature with int id + dense mapped centerline",
        road0.get("path_id") == 0
        and road0.get("name") == "main road"
-       and road0.get("coordinates_pixel") == [[300, 0], [300, 400]],
-       str(road0))
+       and road0.get("coordinates_pixel", [])[0] == [300, 0]
+       and road0.get("coordinates_pixel", [])[-1] == [300, 400]
+       and len(road0.get("coordinates_pixel", [])) == d["summary"]["total_waypoints"],
+       str(road0)[:200])
 PathsExtractionPayload.model_validate(d)
 report("paths: validates against contracts.PathsExtractionPayload", True)
 report("paths: preview is Base64 JPEG data URL",
@@ -243,10 +248,10 @@ report("geo: summary counts match layer lengths", all(
     d["summary"][f"{k}_count"] == len(v) for k, v in layers.items()),
     str(d.get("summary")))
 in_bounds = all(
-    -1e-6 <= min(p[0] for p in f["polygon_pixel"])
-    and max(p[0] for p in f["polygon_pixel"]) <= W
-    and -1e-6 <= min(p[1] for p in f["polygon_pixel"])
-    and max(p[1] for p in f["polygon_pixel"]) <= H
+    -1e-6 <= min(p[0] for p in f["geometry"]["exterior"])
+    and max(p[0] for p in f["geometry"]["exterior"]) <= W
+    and -1e-6 <= min(p[1] for p in f["geometry"]["exterior"])
+    and max(p[1] for p in f["geometry"]["exterior"]) <= H
     for feats in layers.values() for f in feats
 )
 report("geo: polygons within absolute bounds", in_bounds)
@@ -278,7 +283,7 @@ def expected_ring(poly):
 
 
 exp_water = sorted(expected_topo["water"], key=lambda p: p.area, reverse=True)
-got_water = layers["water_bodies"][0]["polygon_pixel"]
+got_water = layers["water_bodies"][0]["geometry"]["exterior"]
 report("geo: water JSON ring == Chaikin-smoothed cleaned geometry",
        got_water == expected_ring(exp_water[0]),
        f"n_got={len(got_water)}, n_exp={len(expected_ring(exp_water[0]))}")
@@ -288,8 +293,18 @@ got_agri = layers["agricultural_plots"]
 report(
     "geo: agri zones stay unified (no road split) and match cleaned geometry",
     len(got_agri) == 1
-    and got_agri[0]["polygon_pixel"] == expected_ring(exp_agri[0]),
+    and got_agri[0]["geometry"]["exterior"] == expected_ring(exp_agri[0]),
     f"count={len(got_agri)}",
+)
+
+# NEW (upgrade): hole preservation in serialized tree canopies.
+exp_trees = sorted(expected_topo["trees"], key=lambda p: p.area, reverse=True)
+tree_feats = {f["plot_id"]: f["geometry"] for f in layers["tree_canopies"]}
+report(
+    "geo: tree interiors preserved when water punches holes",
+    any(len(g["interiors"]) >= 1
+        for g in tree_feats.values()),
+    str({k: len(v["interiors"]) for k, v in tree_feats.items()}),
 )
 
 # --- master endpoint (contracts.MasterGISPayload) ---
@@ -312,7 +327,8 @@ report("master: road splits plots into >=2",
        f"plots={len(d.get('agricultural_plots', []))}")
 report("master: transportation network present",
        d.get("summary", {}).get("transportation_network_count") == 1
-       and d["transportation_network"][0]["coordinates_pixel"] == [[300, 0], [300, 400]])
+       and d["transportation_network"][0]["coordinates_pixel"][0] == [300, 0]
+       and d["transportation_network"][0]["coordinates_pixel"][-1] == [300, 400])
 MasterGISPayload.model_validate(d)
 report("master: validates against contracts.MasterGISPayload", True)
 report("master: preview is Base64 JPEG data URL",

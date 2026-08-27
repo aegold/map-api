@@ -19,6 +19,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import os
+from concurrent.futures import ThreadPoolExecutor
+
 import numpy as np
 from PIL import Image
 from shapely.geometry import Polygon
@@ -27,11 +30,11 @@ import config
 from schemas import SpatialPolygon, TileFeaturesExtraction
 from core.input_engine import JPEG_QUALITY, encode_jpeg_base64
 
-#: Embedded VLM prompt used for every tile.
+#: Embedded VLM prompt used for every tile (cadastral grade).
 TILE_SEGMENTATION_PROMPT: str = """You are an expert Remote Sensing Semantic Segmentation Engine. Extract 3 core spatial layers:
 1. 'water_bodies': Closed polygons for all standing water, fish ponds, and aquaculture basins.
-2. 'tree_canopies': Dense concave polygons (20-45 vertices) tightly hugging tree crowns, orchards, and woodland belts. Exclude roads and water.
-3. 'agricultural_zones': Polygons for active farming land, rice paddies, or crop fields. Seasonally invariant: include GREEN crops, YELLOW/STRAW ripe fields, MUDDY/FLOODED paddies (đổ ải), and PLOWED BROWN soil. Exclude houses, residential compounds, dirt courtyards, yards, and roads.
+2. 'tree_canopies': Dense concave polygons (20-45 vertices) tightly hugging tree crowns, orchards, and woodland belts. FULL FOREST COVERAGE RULE: if this tile is completely covered by dense forest, you MUST emit a polygon covering the ENTIRE forested area instead of treating it as background. Exclude roads and water.
+3. 'agricultural_zones': Polygons for active farming land. SEASONAL INVARIANCE is mandatory: include GREEN rice crops, YELLOW/STRAW ripe fields, PLOWED BROWN soil, AND muddy/flooded harvest paddies (RUỘNG ĐỔ ẢI / NGẬP NƯỚC). CRITICAL: do NOT confuse flooded harvest paddies with water bodies or fish ponds - flooded paddies belong to 'agricultural_zones'. STRICT EXCLUSIONS from agricultural zones: residential compounds, houses, brick/concrete yards (sân gạch / sân bê tông), and all roads.
 
 OUTPUT FORMAT: every polygon must be a closed loop of 20-45 vertices emitted as normalized integer [y, x] pairs on a 0-1000 scale relative to the tile."""
 
@@ -229,19 +232,27 @@ def run_tiling_segmentation(
     rgb = np.asarray(image_np)[:, :, :3]
     height, width = int(rgb.shape[0]), int(rgb.shape[1])
 
+    tiles = generate_tile_grid(width, height)
+    max_workers = min(int(os.getenv("MAX_TILE_WORKERS", "6")), max(len(tiles), 1))
+
+    def _process(tile: dict) -> dict:
+        tx, ty = tile["tx"], tile["ty"]
+        tw, th = tile["tw"], tile["th"]
+        crop = rgb[ty : ty + th, tx : tx + tw]
+        return extract_tile_features(crop, tx, ty, tw, th, client, model_id)
+
     collected: dict[str, list[Polygon]] = {
         "water_bodies": [],
         "tree_canopies": [],
         "agricultural_zones": [],
     }
 
-    for tile in generate_tile_grid(width, height):
-        tx, ty = tile["tx"], tile["ty"]
-        tw, th = tile["tw"], tile["th"]
-        crop = rgb[ty : ty + th, tx : tx + tw]
-        features = extract_tile_features(crop, tx, ty, tw, th, client, model_id)
-        for cls in collected:
-            collected[cls].extend(features[cls])
+    # Parallel tile sweep: VLM calls are I/O-bound, so a small thread pool
+    # cuts total wall-clock latency roughly by the worker count.
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        for features in pool.map(_process, tiles):
+            for cls in collected:
+                collected[cls].extend(features[cls])
 
     return collected
 

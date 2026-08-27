@@ -52,7 +52,7 @@ def run_pipeline(image_path: str, output_dir: str, model_id: str,
     """Execute Stages 1-4 over one image. Returns the timing/summary dict."""
     import config
     from core.input_engine import get_openrouter_client, load_image
-    from core.path_extractor import extract_road_network
+    from core.path_extractor import extract_road_network, sanitize_road_network
     from core.spatial_engine import (
         export_master_gis,
         process_topology,
@@ -85,6 +85,8 @@ def run_pipeline(image_path: str, output_dir: str, model_id: str,
         "Stage 2 - Global transportation pass", timings,
         extract_road_network, sat_img, client, model_id,
     )
+    # Snap-junction repair (ngã ba / ngã tư hở) before spatial engine.
+    road_geoms = sanitize_road_network(road_geoms)
     print(f"    Roads detected: {len(roads_list)}")
 
     # ------------------------------------------------ Stage 3: tiles ------

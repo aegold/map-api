@@ -107,17 +107,34 @@ def smooth_polygon_rings(
         pts = [[int(round(x)), int(round(y))] for x, y in ring.coords[:-1]]
         interiors.append(chaikin_smooth(pts, iterations=iterations))
     return exterior, interiors
+def extract_clean_polygons(geom):
+    """Recursively extract only valid ``Polygon`` pieces from any geometry.
 
-
-def _iter_polygons(geom):
-    """Yield individual Polygon pieces from any geometry."""
-    if geom.is_empty:
-        return
+    Safely handles ``GeometryCollection`` / ``MultiPolygon`` outputs that
+    ``buffer(0)`` may produce (which can also contain LineStrings), skipping
+    everything that is not a usable polygon.
+    """
+    if geom is None or geom.is_empty:
+        return []
     if geom.geom_type == "Polygon":
-        yield geom
-    elif hasattr(geom, "geoms"):  # MultiPolygon / GeometryCollection
+        return [geom]
+    pieces = []
+    if hasattr(geom, "geoms"):  # MultiPolygon / GeometryCollection
         for g in geom.geoms:
-            yield from _iter_polygons(g)
+            pieces.extend(extract_clean_polygons(g))
+    return [p for p in pieces if not p.is_empty and p.geom_type == "Polygon"]
+
+
+def _morphological_close(polygons: Sequence[Polygon], close_px: float = 0.5):
+    """Heal micro slivers between tiles via morphological buffer closing.
+
+    Equivalent to ``unary_union([p.buffer(+cpx) for p in polys]).buffer(-cpx)``
+    which fuses hairline cracks created by the tiling overlap boundaries.
+    """
+    if not polygons:
+        return Polygon()
+    expanded = unary_union([p.buffer(close_px) for p in polygons])
+    return expanded.buffer(-close_px)
 
 
 def process_topology(
@@ -139,10 +156,10 @@ def process_topology(
         Shapely Polygons) and ``stats`` (per-layer counts before/after
         filtering).
     """
-    # --- Union per layer ---------------------------------------------------
-    merged_water = unary_union(list(raw_water)) if raw_water else Polygon()
-    merged_trees = unary_union(list(raw_trees)) if raw_trees else Polygon()
-    merged_agri = unary_union(list(raw_agri)) if raw_agri else Polygon()
+    # --- Union per layer + morphological closing (heal tile slivers) --------
+    merged_water = _morphological_close(list(raw_water))
+    merged_trees = _morphological_close(list(raw_trees))
+    merged_agri = _morphological_close(list(raw_agri))
 
     # --- Hole punching: water wins over vegetation/crops --------------------
     clean_trees = merged_trees.difference(merged_water) if not merged_trees.is_empty else merged_trees
@@ -178,7 +195,7 @@ def process_topology(
     stats: dict = {}
     for key, geometry in layers.items():
         threshold = thresholds[key]
-        pieces = [p for p in _iter_polygons(geometry)]
+        pieces = extract_clean_polygons(geometry)
         kept = [p for p in pieces if p.area >= threshold]
         result[key] = sorted(kept, key=lambda p: p.area, reverse=True)
         stats[key] = {
@@ -282,6 +299,7 @@ __all__ = [
     "CHAIKIN_CUT_T",
     "chaikin_smooth",
     "smooth_polygon_rings",
+    "extract_clean_polygons",
     "process_topology",
     "export_master_gis",
 ]

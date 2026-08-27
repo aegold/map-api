@@ -170,27 +170,24 @@ def render_stage3_preview(
     return fig
 
 
-def render_geo_cleaned_preview(image_np: np.ndarray, layers: dict, hole_polys=None):
+def render_geo_cleaned_preview(image_np: np.ndarray, layers: dict):
     """Render CLEANED + SMOOTHED geo layers over the source image.
 
     Draws exactly the coordinate lists contained in ``layers`` so the JSON
-    response and the preview image always match.
+    response and the preview image always match — including interior hole
+    rings serialized on each feature.
 
     Args:
         image_np: Base full-scene RGB array.
         layers: class name -> list of contract PolygonFeature models
-            (or dicts with a ``polygon_pixel`` key).
-        hole_polys: Optional list of Shapely polygons whose interior rings
-            (punched-out water holes) are drawn as dotted cutouts; each is
-            Chaikin-smoothed via core.spatial_engine.smooth_polygon_rings.
+            (with ``geometry.exterior`` / ``geometry.interiors``) or plain
+            dicts carrying ``polygon_pixel`` / ``polygon_px`` keys.
     """
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
-
-    from core.spatial_engine import smooth_polygon_rings
 
     class_style = {
         "water_bodies": ("#1565c0", "Water bodies"),
@@ -200,34 +197,38 @@ def render_geo_cleaned_preview(image_np: np.ndarray, layers: dict, hole_polys=No
     }
     outline_color = {"water_bodies": "#ff8c00"}  # Dark blue fill, orange outline.
 
+    def _rings_of(feat):
+        """Return (exterior_ring, interior_rings) for a feature."""
+        geometry = getattr(feat, "geometry", None)
+        if geometry is not None:
+            return geometry.exterior, list(geometry.interiors)
+        if isinstance(feat, dict):
+            ring = feat.get("polygon_pixel") or feat.get("polygon_px") or []
+            return ring, []
+        return [], []
+
     fig, ax = plt.subplots(figsize=(12, 12))
     ax.imshow(np.asarray(image_np)[:, :, :3])
 
     z = 3
     for cls, (color, _) in class_style.items():
         for feat in layers.get(cls, []):
-            ring = getattr(feat, "polygon_pixel", None) or (
-                feat["polygon_px"] if isinstance(feat, dict) else None
-            )
-            if not ring:
+            exterior, interiors = _rings_of(feat)
+            if not exterior:
                 continue
-            pts = np.asarray(ring, dtype=float)
+            pts = np.asarray(exterior, dtype=float)
             xs, ys = pts[:, 0], pts[:, 1]
             ax.fill(xs, ys, color=color, alpha=0.35, zorder=z)
             ax.plot(xs, ys, color=outline_color.get(cls, color),
                     linewidth=1.6, zorder=z + 1)
-        z += 2
-
-    # Punched-out water holes inside tree canopies (smoothed interiors).
-    for poly in hole_polys or []:
-        _, interiors = smooth_polygon_rings(poly)
-        for ring in interiors:
-            if len(ring) < 3:
-                continue
-            pts = np.asarray(ring, dtype=float)
-            xs, ys = pts[:, 0], pts[:, 1]
-            ax.plot(xs, ys, color="#00b4d8", linewidth=1.2,
-                    linestyle=":", zorder=z + 1)
+            # Serialized hole rings (punched-out water etc.).
+            for hole in interiors:
+                if len(hole) < 3:
+                    continue
+                hpts = np.asarray(hole, dtype=float)
+                ax.plot(hpts[:, 0], hpts[:, 1], color="#00b4d8",
+                        linewidth=1.2, linestyle=":", zorder=z + 2)
+        z += 3
 
     ax.legend(handles=[
         Patch(facecolor=c, edgecolor=c, alpha=0.55, label=label)

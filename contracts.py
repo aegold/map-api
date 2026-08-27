@@ -27,11 +27,24 @@ class RoadFeature(BaseModel):
     )
 
 
-class PolygonFeature(BaseModel):
-    feature_id: int
-    polygon_pixel: list[list[int]] = Field(
-        description="Closed vertex loop [x, y] in absolute image pixel space"
+class PolygonGeometry(BaseModel):
+    """Polygon geometry with hole preservation (Chaikin-smoothed rings)."""
+
+    exterior: list[list[int]] = Field(
+        description="Smoothed closed exterior ring as [[x, y], ...] pixel coordinates"
     )
+    interiors: list[list[list[int]]] = Field(
+        default_factory=list,
+        description=(
+            "List of interior hole rings (e.g. punched-out water inside "
+            "tree canopies), each a [[x, y], ...] smoothed loop"
+        ),
+    )
+
+
+class PolygonFeature(BaseModel):
+    plot_id: int
+    geometry: PolygonGeometry
 
 
 # =====================================================================
@@ -97,6 +110,7 @@ class APIResponse(BaseModel, Generic[T]):
 
 __all__ = [
     "RoadFeature",
+    "PolygonGeometry",
     "PolygonFeature",
     "PathsExtractionPayload",
     "GeoExtractionPayload",
