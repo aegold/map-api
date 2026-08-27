@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Sequence
 
 import numpy as np
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString, MultiLineString, Polygon
 from shapely.ops import unary_union
 
 import config
@@ -125,15 +125,42 @@ def extract_clean_polygons(geom):
     return [p for p in pieces if not p.is_empty and p.geom_type == "Polygon"]
 
 
+def _to_linestrings(roads) -> list:
+    """Normalize road input into a flat list of usable line geometries.
+
+    Accepts ``None``, a single geometry, a ``MultiLineString``, or a nested
+    sequence/list. Skips empty and non-iterable members so the caller never
+    iterates over ``None``.
+    """
+    if roads is None:
+        return []
+    if isinstance(roads, (LineString, MultiLineString)) or (
+        hasattr(roads, "geom_type") and roads.geom_type in ("LineString", "MultiLineString")
+    ):
+        items = list(getattr(roads, "geoms", [roads]))
+    else:
+        items = list(roads)
+    result: list = []
+    for item in items:
+        if item is None or getattr(item, "is_empty", False):
+            continue
+        if hasattr(item, "geom_type") and item.geom_type == "MultiLineString":
+            result.extend(list(item.geoms))
+        else:
+            result.append(item)
+    return result
+
+
 def _morphological_close(polygons: Sequence[Polygon], close_px: float = 0.5):
     """Heal micro slivers between tiles via morphological buffer closing.
 
     Equivalent to ``unary_union([p.buffer(+cpx) for p in polys]).buffer(-cpx)``
     which fuses hairline cracks created by the tiling overlap boundaries.
     """
-    if not polygons:
+    polys = [p for p in polygons if p is not None and not getattr(p, "is_empty", True)]
+    if not polys:
         return Polygon()
-    expanded = unary_union([p.buffer(close_px) for p in polygons])
+    expanded = unary_union([p.buffer(close_px) for p in polys])
     return expanded.buffer(-close_px)
 
 
@@ -166,9 +193,10 @@ def process_topology(
     clean_agri = merged_agri.difference(merged_water) if not merged_agri.is_empty else merged_agri
 
     # --- Cadastral plot splitting along road corridors ----------------------
-    if road_linestrings:
+    road_lines = _to_linestrings(road_linestrings)
+    if road_lines:
         road_corridor_buffers = unary_union(
-            [line.buffer(config.ROAD_BUFFER_PX) for line in road_linestrings]
+            [line.buffer(config.ROAD_BUFFER_PX) for line in road_lines]
         )
         split_agri = (
             clean_agri.difference(road_corridor_buffers)

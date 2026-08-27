@@ -171,7 +171,7 @@ def extract_road_network(
 
 
 def sanitize_road_network(
-    road_lines: Sequence[LineString], snap_tolerance: float = 12.0
+    road_lines, snap_tolerance: float = 12.0
 ):
     """Close small gaps at junctions before handing roads to Stage 4.
 
@@ -181,14 +181,17 @@ def sanitize_road_network(
     per-path extraction.
 
     Args:
-        road_lines: Extracted road ``LineString`` objects in pixel space.
+        road_lines: Extracted road ``LineString`` objects in pixel space
+            (a single geometry, a ``MultiLineString``, a list, or ``None``).
         snap_tolerance: Maximum snapping distance in pixels (default 12.0).
 
     Returns:
         List of snapped/merged ``LineString`` objects ready for Stage 4
-        (empty list when no valid input).
+        (always a list; empty when no valid input).
     """
-    lines = [line for line in road_lines if line is not None and not line.is_empty]
+    from core.spatial_engine import _to_linestrings
+
+    lines = _to_linestrings(road_lines)
     if not lines:
         return []
     if len(lines) == 1:

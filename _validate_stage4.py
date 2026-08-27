@@ -152,6 +152,33 @@ gc = GeometryCollection([box(0, 0, 100, 200), LineString([(0, 0), (50, 50)])])
 cleaned = extract_clean_polygons(gc.buffer(0) if not gc.is_valid else gc)
 report("extract_clean_polygons skips non-polygon members", len(cleaned) == 1)
 
+# --- NoneType/iteration hardening (production "NoneType not iterable") -----
+from shapely.geometry import MultiLineString, LineString as _LS
+
+agri = [box(0, 0, 1000, 500)]
+for tag, roads in [
+    ("None", None),
+    ("single LineString", _LS([(100, 0), (100, 500)])),
+    ("[None] list", [None]),
+    ("MultiLineString", MultiLineString([[(100, 0), (100, 500)], [(300, 0), (300, 500)]])),
+]:
+    try:
+        t = process_topology(raw_water=[], raw_trees=[], raw_agri=agri,
+                             road_linestrings=roads)
+        head = "OK"
+    except Exception as e:
+        head = f"CRASH {e!r}"
+    report(f"process_topology handles roads={tag} ({head})",
+           head == "OK", head)
+
+# sanitize_road_network must never raise / must return a list for weird input
+from core.path_extractor import sanitize_road_network as _srn
+
+report("sanitize_road_network([None]) returns [] without crash",
+       _srn([None]) == [])
+report("sanitize_road_network(None) returns [] without crash",
+       _srn(None) == [])
+
 
 # ------------------------------------------------------ JSON export --------
 roads_list = [
