@@ -108,7 +108,7 @@ class GeminiRoadResult(BaseModel):
 class SpatialPolygon(BaseModel):
     """A closed spatial feature polygon.
 
-    ``polygon_1000`` is an ordered ring of 20-45 ``[y, x]`` vertices on the
+    ``polygon_1000`` is an ordered ring of ``[y, x]`` vertices (>= 3) on the
     0-1000 normalized tile scale.
     """
 
@@ -117,21 +117,16 @@ class SpatialPolygon(BaseModel):
     polygon_1000: list[list[int]] = Field(
         ...,
         description=(
-            f"Ordered polygon ring of {MIN_POLYGON_VERTICES}-{MAX_POLYGON_VERTICES} "
-            "[y, x] vertices on a 0-1000 scale."
+            "Ordered polygon ring (>= 3 vertices) of [y, x] on a 0-1000 scale."
         ),
     )
 
     @field_validator("polygon_1000")
     @classmethod
     def _validate_polygon(cls, v: list[list[int]]) -> list[list[int]]:
-        cleaned = _validate_point_list(v, min_points=MIN_POLYGON_VERTICES)
-        if len(cleaned) > MAX_POLYGON_VERTICES:
-            raise ValueError(
-                f"polygon_1000 must have at most {MAX_POLYGON_VERTICES} vertices, "
-                f"got {len(cleaned)}"
-            )
-        return cleaned
+        # Any vertex count >= 3 is accepted; a polygon only needs 3 points
+        # to be geometrically valid. Concave-dense rings are not enforced.
+        return _validate_point_list(v, min_points=3)
 
 
 class TileFeaturesExtraction(BaseModel):

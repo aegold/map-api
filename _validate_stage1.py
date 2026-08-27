@@ -101,11 +101,16 @@ def ring(n):
 poly_ok = SpatialPolygon(polygon_1000=ring(30))
 report("SpatialPolygon accepts 30 vertices", len(poly_ok.polygon_1000) == 30)
 
-report(
-    f"rejects <{MIN_POLYGON_VERTICES} and >{MAX_POLYGON_VERTICES} vertices",
-    expect_raises(lambda: SpatialPolygon(polygon_1000=ring(MIN_POLYGON_VERTICES - 1)))
-    and expect_raises(lambda: SpatialPolygon(polygon_1000=ring(MAX_POLYGON_VERTICES + 1))),
-)
+# No vertex-count ceiling (real model returned 50 inside agricultural zone).
+report("SpatialPolygon accepts 50 vertices (real production case)",
+       len(SpatialPolygon(polygon_1000=ring(50)).polygon_1000) == 50)
+# No 20-vertex minimum: small zones (7 vertices) are valid too.
+report("SpatialPolygon accepts 7-vertex polygon (real case)",
+       len(SpatialPolygon(
+           polygon_1000=[[634, 746], [677, 851], [625, 753]] + ring(4)).polygon_1000) == 7)
+# Degenerate (<3 points) is still rejected.
+report("SpatialPolygon rejects <3 vertices",
+       expect_raises(lambda: SpatialPolygon(polygon_1000=ring(2))))
 
 
 def oob_polygon():
