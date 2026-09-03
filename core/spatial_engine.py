@@ -179,6 +179,60 @@ def smooth_polygon_rings(
         pts = [[int(round(x)), int(round(y))] for x, y in ring.coords[:-1]]
         interiors.append(chaikin_smooth(pts, iterations=iterations))
     return exterior, interiors
+
+
+def smooth_polygon_robust(
+    poly: Polygon,
+    simplify_tol: float = 1.5,
+    chaikin_iters: int = 2,
+) -> Polygon:
+    """Triệt tiêu đỉnh nhọn lởm chởm và làm mượt biên dạng đa giác.
+
+    1. Douglas-Peucker simplification removes micro-noise spikes caused by
+       tile-stitching before any smoothing runs.
+    2. Chaikin corner-cutting (``chaikin_iters`` passes, t=0.15) smooths both
+       the exterior and every interior hole ring.
+
+    Args:
+        poly: Shapely Polygon to smooth.
+        simplify_tol: Douglas-Peucker tolerance in pixels.
+        chaikin_iters: Number of Chaikin passes per ring.
+
+    Returns:
+        Robust-smoothed ``Polygon``; degenerate/invalid inputs are returned
+        unchanged.
+    """
+    if not poly.is_valid or poly.is_empty or poly.area < 10.0:
+        return poly
+
+    # Bước 1: Lọc phẳng đỉnh răng cưa li ti (Douglas-Peucker).
+    simplified = poly.simplify(simplify_tol, preserve_topology=True)
+    if not isinstance(simplified, Polygon) or simplified.is_empty:
+        simplified = poly
+
+    def _smooth_ring(coords):
+        pts = [[int(round(x)), int(round(y))] for x, y in list(coords)[:-1]]
+        if len(pts) < 4:
+            return pts
+        return chaikin_smooth(pts, iterations=chaikin_iters)
+
+    # Bước 2: Chaikin Smoothing cho chu vi ngoài và các lỗ rỗng.
+    new_exterior = _smooth_ring(simplified.exterior.coords)
+    new_interiors = [_smooth_ring(interior.coords)
+                     for interior in simplified.interiors]
+
+    try:
+        smoothed_poly = Polygon(new_exterior, new_interiors).buffer(0)
+        result = extract_clean_polygons(smoothed_poly)
+        if result:
+            best = max(result, key=lambda p: p.area)
+            if best.is_valid and not best.is_empty:
+                return best
+        return poly
+    except Exception:
+        return poly
+
+
 def extract_clean_polygons(geom):
     """Recursively extract only valid ``Polygon`` pieces from any geometry.
 
@@ -302,6 +356,9 @@ def process_topology(
         threshold = thresholds[key]
         pieces = extract_clean_polygons(geometry)
         kept = [p for p in pieces if p.area >= threshold]
+        # Robust smoothing (DP-simplify + Chaikin x2) kills spiky tile
+        # stitching artifacts before the geometry is serialized/rendered.
+        kept = [smooth_polygon_robust(p) for p in kept]
         result[key] = sorted(kept, key=lambda p: p.area, reverse=True)
         stats[key] = {
             "raw_input": raw_counts[key],
@@ -404,6 +461,7 @@ __all__ = [
     "CHAIKIN_CUT_T",
     "chaikin_smooth",
     "smooth_polygon_rings",
+    "smooth_polygon_robust",
     "smooth_open_linestring",
     "smooth_linestring_geometry",
     "extract_clean_polygons",

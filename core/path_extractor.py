@@ -55,7 +55,11 @@ EXHAUSTIVE RECALL & CONTINUITY RULES:
 4. DISCRETE BRANCHES:
    - Separate distinct disconnected paths into individual items in the `paths` list.
 5. COORDINATE FORMAT:
-   - Return ordered integer coordinates in normalized [y, x] space (0-1000 scale)."""
+   - Return ordered integer coordinates in normalized [y, x] space (0-1000 scale).
+
+ASPHALT CENTER vs CURB BIAS (planned subdivisions / new grid layouts):
+- In new residential developments with bright concrete sidewalks, curbs, or fence boundaries, lock onto the CENTER of the dark asphalt carriageway.
+- Do NOT follow curb lines, sidewalk edges, or bright boundary lines - those are NOT the road centerline (TÂM ĐƯỜNG)."""
 
 ImageLike = Union[str, bytes, np.ndarray, Image.Image, SatelliteImage]
 
@@ -180,6 +184,29 @@ def extract_road_network(
     return roads_list, geometries
 
 
+def _extend_endpoints(line: LineString, dist: float) -> LineString:
+    """Extend both endpoints of an open line by ``dist`` px along its
+    first/last segment bearing, so short junction gaps close on snap."""
+    coords = list(line.coords)
+    if len(coords) < 2 or dist <= 0:
+        return line
+    (x0, y0), (x1, y1) = coords[0], coords[1]
+    dx, dy = x1 - x0, y1 - y0
+    seg = (dx * dx + dy * dy) ** 0.5
+    if seg > 1e-9:
+        x0 -= dist * dx / seg
+        y0 -= dist * dy / seg
+        coords[0] = (x0, y0)
+    (x0, y0), (x1, y1) = coords[-2], coords[-1]
+    dx, dy = x1 - x0, y1 - y0
+    seg = (dx * dx + dy * dy) ** 0.5
+    if seg > 1e-9:
+        x1 += dist * dx / seg
+        y1 += dist * dy / seg
+        coords[-1] = (x1, y1)
+    return LineString(coords)
+
+
 def sanitize_road_network(
     road_lines, snap_tolerance: float = 12.0
 ):
@@ -205,10 +232,12 @@ def sanitize_road_network(
     if len(lines) == 1:
         return [lines[0]]
 
-    snapped = [lines[0]]
+    # Extend endpoints so short branch-to-main gaps close on snap.
+    snapped = [_extend_endpoints(lines[0], snap_tolerance)]
     for line in lines[1:]:
         reference = unary_union(snapped)
-        snapped.append(snap(line, reference, snap_tolerance))
+        snapped.append(snap(_extend_endpoints(line, snap_tolerance),
+                            reference, snap_tolerance))
     merged = linemerge(unary_union(snapped))
     pieces = list(getattr(merged, "geoms", [merged])) or list(snapped)
     return [p for p in pieces if not p.is_empty]
