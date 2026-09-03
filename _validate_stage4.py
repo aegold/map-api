@@ -278,6 +278,42 @@ ext_line = _extend_endpoints(_LS([(100, 100), (200, 100)]), 12.0)
 report("_extend_endpoints grows line by 12px on each side",
        abs(ext_line.length - 124.0) < 0.01, f"len={ext_line.length}")
 
+# --- Tile seam healing (morphological closing @ 2.0px) ---------------------
+from core.spatial_engine import close_tile_seams
+
+cracked = [box(0, 0, 499.0, 300), box(501.0, 0, 1000, 300)]  # 2px gap
+healed = close_tile_seams(cracked, buffer_dist=2.0)
+pieces = extract_clean_polygons(healed)
+report("close_tile_seams: 2px tile crack fused into 1 piece", len(pieces) == 1,
+       f"pieces={len(pieces)}")
+
+separated = close_tile_seams([box(0, 0, 480, 300), box(520, 0, 1000, 300)])
+report("close_tile_seams: 40px gap stays separate",
+       len(extract_clean_polygons(separated)) == 2)
+
+report("close_tile_seams: empty/invalid input -> empty Polygon",
+       close_tile_seams([]).is_empty and close_tile_seams([None]).is_empty)
+
+# Tightened B-Spline (s=0.5): S-curve hugs original waypoints closely
+s_pts = [[0, 300], [150, 300], [300, 260], [450, 340], [600, 300]]
+sm_s = smooth_open_linestring(s_pts)
+max_dev = max(
+    min(abs(y - sy) for _, sy in s_pts) for _, y in sm_s
+)
+report("tightened B-Spline: S-curve hugs waypoints (max dev < 25px)",
+       max_dev < 25.0, f"max_dev={max_dev:.1f}")
+
+# Dangling spur pruning: short floating spur dropped, connected lines kept
+short_spur_line = _LS([(0, 0), (20, 0)])  # 20px < 25px threshold, isolated
+main_line = _LS([(100, 0), (1000, 0)])
+split_with_spur = process_topology(
+    raw_water=[], raw_trees=[],
+    raw_agri=[box(0, 0, 1000, 500)],
+    road_linestrings=[short_spur_line, main_line],
+)
+report("dangling spur <25px pruned from parcel splitting",
+       len(split_with_spur["agri_plots"]) >= 1)
+
 # ------------------------------------------------------ JSON export --------
 roads_list = [
     {"path_id": 0, "name": "main road", "centerline_px": [[500, 0], [500, 1000]]},

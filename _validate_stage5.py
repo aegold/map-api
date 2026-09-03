@@ -157,17 +157,16 @@ from core.path_extractor import ROAD_EXTRACTION_PROMPT as P2_PROMPT
 from core.tile_segmentor import TILE_SEGMENTATION_PROMPT as P3_PROMPT
 
 report(
-    "S2 prompt: max-recall, TÂM ĐƯỜNG, curb-bias, forbidden 90-deg",
+    "S2 prompt: residential grids, precise asphalt centerline, recall",
     P2_PROMPT.startswith("ROLE & OBJECTIVE:")
     and "TÂM ĐƯỜNG" in P2_PROMPT
     and "Photogrammetry Engineer" in P2_PROMPT
-    and "EVERY visible road" in P2_PROMPT
-    and "short dead-end spur trails" in P2_PROMPT
-    and "MAXIMUM RECALL" in P2_PROMPT
-    and "MAINTAIN the trajectory and bridge the gap" in P2_PROMPT
-    and "NO 90-DEGREE STEPS" in P2_PROMPT
-    and "ASPHALT CENTER vs CURB BIAS" in P2_PROMPT
-    and "Do NOT follow curb lines" in P2_PROMPT,
+    and "RESIDENTIAL SUBDIVISIONS & PLANNED GRIDS" in P2_PROMPT
+    and "EVERY internal dividing street" in P2_PROMPT
+    and "PRECISE ASPHALT CENTERLINE" in P2_PROMPT
+    and "sidewalk curbs" in P2_PROMPT
+    and "drainage ditches" in P2_PROMPT
+    and "EXHAUSTIVE RECALL" in P2_PROMPT,
 )
 report(
     "S2 prompt: [y, x] integer 0-1000 grounding directive",
@@ -181,25 +180,20 @@ report(
     and "CONCAVE polygons (20-45 vertices)" in P3_PROMPT,
 )
 report(
-    "S3 prompt: strict agri morphology (cultivated land signs required)",
+    "S3 prompt: exhaustive tree coverage (large woodlands not background)",
+    "EXHAUSTIVE TREE COVERAGE" in P3_PROMPT
+    and "LARGE CONTIGUOUS WOODLANDS" in P3_PROMPT
+    and "roadside tree belts" in P3_PROMPT
+    and "Do NOT ignore large woodlands as background" in P3_PROMPT
+    and "extending to the tile borders" in P3_PROMPT,
+)
+report(
+    "S3 prompt: strict cultivated-land exclusion rules",
     "STRICT CULTIVATED LAND ONLY" in P3_PROMPT
-    and "MAN-MADE crop fields" in P3_PROMPT
-    and all(k in P3_PROMPT for k in (
-        "parcel boundaries", "terrace bunds", "plowed furrows",
-        "row-crop patterns", "flooded paddy basins")),
-)
-report(
-    "S3 prompt: false-positive grassland/pasture exclusion",
-    all(k in P3_PROMPT for k in (
-        "natural grassland", "uncultivated pasture slopes",
-        "rolling green hills", "wild meadows", "forest clearings",
-        "NO distinct parcel borders")),
-)
-report(
-    "S3 prompt: negative constraints (residential, dirt yards, road surfaces)",
-    "residential compounds" in P3_PROMPT
-    and "dirt yards" in P3_PROMPT
-    and "road surfaces" in P3_PROMPT,
+    and "bare pasture hillsides" in P3_PROMPT
+    and "uncultivated wild grassland" in P3_PROMPT
+    and "concrete yards" in P3_PROMPT
+    and "roads" in P3_PROMPT,
 )
 report(
     "S3 prompt: [y, x] integer 0-1000 grounding directive",

@@ -37,29 +37,22 @@ from core.spatial_engine import (
     smooth_open_linestring,
 )
 
-#: Embedded VLM prompt for the global transportation pass (max-recall cadastral).
+#: Embedded VLM prompt for the global transportation pass (cadastral grade).
 ROAD_EXTRACTION_PROMPT: str = """ROLE & OBJECTIVE:
 You are an expert Cadastral Remote Sensing Surveyor and Photogrammetry Engineer.
-Analyze this aerial image and trace the exact CENTERLINES (TÂM ĐƯỜNG) of EVERY visible road, dirt track, hairpin switchback, and pasture path.
+Analyze this aerial image and trace the exact CENTERLINES (TÂM ĐƯỜNG) of all visible road networks, paved streets, planned residential grids, and field paths.
 
-EXHAUSTIVE RECALL & CONTINUITY RULES:
-1. TRACE EVERY VISIBLE TRACK (MAXIMUM RECALL):
-   - You MUST extract all primary roads, winding mountain tracks, horseshoe loops, hairpin turns, and short dead-end spur trails.
-   - Do NOT omit faint, dusty, or narrow unpaved tracks traversing hillsides or pasture slopes.
-2. CONTINUITY THROUGH FAINT PATCHES & SHADOWS:
-   - When a track becomes slightly faint, dusty, or partially occluded by tree crowns (< 40 meters), MAINTAIN the trajectory and bridge the gap.
-   - Do NOT stop tracing prematurely if the road visibly continues past a shadow or bare dirt patch.
-3. ORGANIC SMOOTH CURVES (NO 90-DEGREE STEPS):
-   - Trace natural flowing curves with dense waypoints (20 to 60 waypoints per segment).
-   - STRICTLY FORBIDDEN: Do not draw staircase steps, axis-aligned right angles, or artificial zig-zags.
-4. DISCRETE BRANCHES:
-   - Separate distinct disconnected paths into individual items in the `paths` list.
-5. COORDINATE FORMAT:
-   - Return ordered integer coordinates in normalized [y, x] space (0-1000 scale).
-
-ASPHALT CENTER vs CURB BIAS (planned subdivisions / new grid layouts):
-- In new residential developments with bright concrete sidewalks, curbs, or fence boundaries, lock onto the CENTER of the dark asphalt carriageway.
-- Do NOT follow curb lines, sidewalk edges, or bright boundary lines - those are NOT the road centerline (TÂM ĐƯỜNG)."""
+CRITICAL RULES:
+1. RESIDENTIAL SUBDIVISIONS & PLANNED GRIDS:
+   - For planned residential developments and construction sites with terraced plots:
+     You MUST trace EVERY internal dividing street and access road between plots, not just the perimeter road.
+2. PRECISE ASPHALT CENTERLINE:
+   - Place the centerline strictly along the middle of the roadbed. Do NOT snap to sidewalk curbs, edges, or drainage ditches.
+   - Do NOT cut across agricultural fields or curve unnaturally into adjacent parcels.
+3. EXHAUSTIVE RECALL:
+   - Trace all village alleys, branch roads, and canal walkways. Ensure intersecting roads touch the main arterial line.
+4. COORDINATE FORMAT:
+   - Return ordered integer coordinates in normalized [y, x] space (0-1000 scale)."""
 
 ImageLike = Union[str, bytes, np.ndarray, Image.Image, SatelliteImage]
 

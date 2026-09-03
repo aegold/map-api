@@ -35,19 +35,15 @@ TILE_SEGMENTATION_PROMPT: str = """ROLE & OBJECTIVE:
 You are an expert Remote Sensing Semantic Segmentation Engine. Extract 3 core spatial layers within this tile:
 
 1. 'water_bodies': 
-   - Closed polygons for permanent standing water: ponds, lakes, reservoirs, canals.
+   - Closed polygons for permanent standing water: fish ponds, canals, lakes, reservoirs.
 
-2. 'tree_canopies': 
-   - Dense CONCAVE polygons (20-45 vertices) tightly hugging tree crowns, orchards, and woodland belts.
-   - FULL COVERAGE: If the tile contains dense contiguous forest, trace a complete polygon covering the forest area. Exclude roads and water.
+2. 'tree_canopies' (EXHAUSTIVE TREE COVERAGE):
+   - Dense CONCAVE polygons (20-45 vertices) for ALL tree cover: small garden tree clusters, roadside tree belts, and LARGE CONTIGUOUS WOODLANDS.
+   - If a large forest block covers part or all of the tile, trace its complete perimeter extending to the tile borders. Do NOT ignore large woodlands as background.
 
 3. 'agricultural_zones' (STRICT CULTIVATED LAND ONLY):
-   - DEFINITION: Active MAN-MADE crop fields, cultivated plots, rice paddies, and organized farming beds.
-   - MANDATORY MORPHOLOGICAL SIGNS: Must show clear evidence of human agricultural division, such as parcel boundaries, terrace bunds/dikes, plowed furrows, row-crop patterns, or flooded paddy basins.
-   - STRICT EXCLUSIONS (DO NOT LABEL AS AGRICULTURAL):
-     * DO NOT label natural grassland, uncultivated pasture slopes, rolling green hills, wild meadows, or forest clearings lacking farming boundaries.
-     * DO NOT label residential compounds, dirt yards, or road surfaces.
-     * If an open green area has NO distinct parcel borders or farming texture, treat it as uncultivated terrain (DO NOT include in agricultural_zones).
+   - Only active farmed fields showing human cultivation patterns (bunds, furrows, terraces, paddies).
+   - EXCLUDE bare pasture hillsides, uncultivated wild grassland, residential houses, concrete yards, and roads.
 
 OUTPUT FORMAT:
 Return dense vertex sequences (20-45 points per polygon) in normalized [y, x] space (0-1000 scale)."""

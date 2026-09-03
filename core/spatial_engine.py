@@ -88,14 +88,15 @@ def chaikin_smooth(
 
 def smooth_open_linestring(
     coords: list[list[int]],
-    smoothing_factor: float = 3.0,
+    smoothing_factor: float = 0.5,
     num_points: int = 60,
 ) -> list[list[int]]:
     """Smooth an open LineString via cubic parametric B-Spline interpolation.
 
-    Removes Manhattan-style right-angle staircase artifacts while preserving
-    the original first and last vertices exactly. Short paths (< 100 px) use
-    a reduced sample count to avoid point bloat.
+    Uses a tight smoothing factor (default 0.5, down from 3.0) so the curve
+    hugs 100% of the original waypoints - no bows wandering off the real
+    roadbed into adjacent parcels. Short paths (< 100 px) use a reduced
+    sample count to avoid point bloat.
 
     Args:
         coords: Ordered ``[x, y]`` pixel coordinates.
@@ -104,11 +105,12 @@ def smooth_open_linestring(
 
     Returns:
         Smoothed ``list[list[int]]``; degenerate inputs (< 4 unique points)
-        or interpolation failure are returned unchanged.
+        are returned int-rounded unchanged, and interpolation failure falls
+        back to the filtered int-rounded points.
     """
     pts = np.array(coords, dtype=np.float64)
     if len(pts) < 4:
-        return coords
+        return [[int(round(x)), int(round(y))] for x, y in pts]
 
     # Drop consecutive duplicate / very-close points (< 1.5 px).
     diff = np.sum(np.abs(np.diff(pts, axis=0)), axis=1)
@@ -116,7 +118,7 @@ def smooth_open_linestring(
     unique_mask[1:] = diff > 1.5
     pts = pts[unique_mask]
     if len(pts) < 4:
-        return coords
+        return [[int(round(x)), int(round(y))] for x, y in pts]
 
     try:
         from scipy.interpolate import splprep, splev
@@ -134,13 +136,13 @@ def smooth_open_linestring(
         u_fine = np.linspace(0, 1.0, target_pts)
         x_new, y_new = splev(u_fine, tck)
 
-        # Preserve original endpoints.
+        # Preserve original endpoints absolutely.
         x_new[0], y_new[0] = pts[0, 0], pts[0, 1]
         x_new[-1], y_new[-1] = pts[-1, 0], pts[-1, 1]
 
         return [[int(round(x)), int(round(y))] for x, y in zip(x_new, y_new)]
     except Exception:
-        return coords
+        return [[int(round(x)), int(round(y))] for x, y in pts]
 
 
 def smooth_linestring_geometry(
@@ -277,17 +279,30 @@ def _to_linestrings(roads) -> list:
     return result
 
 
-def _morphological_close(polygons: Sequence[Polygon], close_px: float = 0.5):
-    """Heal micro slivers between tiles via morphological buffer closing.
+def close_tile_seams(
+    polygons: Sequence[Polygon], buffer_dist: float = 2.0
+):
+    """Hàn kín khe hở và triệt tiêu đa giác tam giác nhọn tại ranh giới tile.
 
-    Equivalent to ``unary_union([p.buffer(+cpx) for p in polys]).buffer(-cpx)``
-    which fuses hairline cracks created by the tiling overlap boundaries.
+    Equivalent to ``unary_union([p.buffer(+d) for p in polys]).buffer(-d)``:
+    inflate each polygon so misaligned tile edges touch, merge, then shrink
+    back to recover the true area. Kills hairline cracks and needle
+    triangles at 512px tile boundaries.
+
+    Args:
+        polygons: Raw per-layer polygons (Stage 3 output).
+        buffer_dist: Morphological closing distance in pixels (default 2.0).
+
+    Returns:
+        Seam-healed (possibly Multi)Polygon geometry.
     """
-    polys = [p for p in polygons if p is not None and not getattr(p, "is_empty", True)]
-    if not polys:
+    valid_polys = [p for p in polygons if p is not None and p.is_valid
+                   and not p.is_empty]
+    if not valid_polys:
         return Polygon()
-    expanded = unary_union([p.buffer(close_px) for p in polys])
-    return expanded.buffer(-close_px)
+    inflated = [p.buffer(buffer_dist) for p in valid_polys]
+    merged = unary_union(inflated)
+    return merged.buffer(-buffer_dist)
 
 
 def process_topology(
@@ -309,10 +324,10 @@ def process_topology(
         Shapely Polygons) and ``stats`` (per-layer counts before/after
         filtering).
     """
-    # --- Union per layer + morphological closing (heal tile slivers) --------
-    merged_water = _morphological_close(list(raw_water))
-    merged_trees = _morphological_close(list(raw_trees))
-    merged_agri = _morphological_close(list(raw_agri))
+    # --- Union per layer + tile-seam healing (morphological closing) -----------
+    merged_water = close_tile_seams(list(raw_water), buffer_dist=2.0)
+    merged_trees = close_tile_seams(list(raw_trees), buffer_dist=2.0)
+    merged_agri = close_tile_seams(list(raw_agri), buffer_dist=2.0)
 
     # --- Hole punching: water wins over vegetation/crops --------------------
     clean_trees = merged_trees.difference(merged_water) if not merged_trees.is_empty else merged_trees
@@ -326,6 +341,18 @@ def process_topology(
         smoothed_roads = [
             smooth_linestring_geometry(line) for line in road_lines
         ]
+        # Prune dangling spurs: drop lines shorter than 25px that do not
+        # touch/intersect any other line (floating artifacts), but never
+        # prune away everything when there are multiple lines.
+        if len(smoothed_roads) > 1:
+            connected = [
+                line for line in smoothed_roads
+                if line.length >= 25.0
+                or any(line.intersects(other)
+                       for other in smoothed_roads if other is not line)
+            ]
+            if connected:
+                smoothed_roads = connected
         road_corridor_buffers = unary_union(
             [line.buffer(config.ROAD_BUFFER_PX) for line in smoothed_roads]
         )
@@ -464,6 +491,7 @@ __all__ = [
     "smooth_polygon_robust",
     "smooth_open_linestring",
     "smooth_linestring_geometry",
+    "close_tile_seams",
     "extract_clean_polygons",
     "process_topology",
     "export_master_gis",

@@ -40,14 +40,14 @@ def expect_raises(fn):
 
 report("prompt embedded verbatim", ROAD_EXTRACTION_PROMPT.startswith(
     "ROLE & OBJECTIVE:") and "TÂM ĐƯỜNG" in ROAD_EXTRACTION_PROMPT)
-report("prompt: max-recall + continuity + curb-bias directives",
+report("prompt: residential-grid + precise-asphalt directives",
        all(k in ROAD_EXTRACTION_PROMPT for k in (
-           "Photogrammetry Engineer", "EVERY visible road",
-           "short dead-end spur trails", "MAXIMUM RECALL",
-           "Do NOT omit faint", "MAINTAIN the trajectory and bridge the gap",
-           "NO 90-DEGREE STEPS", "20 to 60 waypoints", "`paths`", "[y, x]",
-           "ASPHALT CENTER vs CURB BIAS", "CENTER of the dark asphalt",
-           "Do NOT follow curb lines")))
+           "Photogrammetry Engineer", "planned residential grids",
+           "RESIDENTIAL SUBDIVISIONS & PLANNED GRIDS",
+           "EVERY internal dividing street", "not just the perimeter road",
+           "PRECISE ASPHALT CENTERLINE", "sidewalk curbs",
+           "drainage ditches", "EXHAUSTIVE RECALL", "canal walkways",
+           "touch the main arterial line", "[y, x]")))
 
 # ------------------------------------------------- input normalization -----
 W, H = 800, 600
