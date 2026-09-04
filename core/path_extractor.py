@@ -40,18 +40,20 @@ from core.spatial_engine import (
 #: Embedded VLM prompt for the global transportation pass (cadastral grade).
 ROAD_EXTRACTION_PROMPT: str = """ROLE & OBJECTIVE:
 You are an expert Cadastral Remote Sensing Surveyor and Photogrammetry Engineer.
-Analyze this aerial image and trace the exact CENTERLINES (TÂM ĐƯỜNG) of all visible road networks, paved streets, planned residential grids, and field paths.
+Analyze this aerial image and trace the exact CENTERLINES (TÂM ĐƯỜNG) of all visible road networks, paved streets, planned residential grids, and village alleys.
 
 CRITICAL RULES:
-1. RESIDENTIAL SUBDIVISIONS & PLANNED GRIDS:
-   - For planned residential developments and construction sites with terraced plots:
-     You MUST trace EVERY internal dividing street and access road between plots, not just the perimeter road.
-2. PRECISE ASPHALT CENTERLINE:
-   - Place the centerline strictly along the middle of the roadbed. Do NOT snap to sidewalk curbs, edges, or drainage ditches.
-   - Do NOT cut across agricultural fields or curve unnaturally into adjacent parcels.
-3. EXHAUSTIVE RECALL:
-   - Trace all village alleys, branch roads, and canal walkways. Ensure intersecting roads touch the main arterial line.
-4. COORDINATE FORMAT:
+1. PRESERVE STAGGERED T-JUNCTIONS (NO FAKE 4-WAY CROSSINGS):
+   - In residential villages, paths frequently form offset/staggered T-junctions rather than aligned 4-way intersections.
+   - Do NOT artificially align, bridge, or extend a dead-end village alley across a through-road into another branch if they are physically offset or separated by residential yards/houses.
+   - Terminate an alley exactly where it meets a house gate, yard, or dead end.
+2. PRESERVE MAIN THOROUGHFARE CONTINUITY:
+   - When secondary lanes branch off from a curved or diagonal main road, the main road's continuous curvature must NOT be kinked, bent, or artificially pulled toward the intersection point.
+3. RESIDENTIAL SUBDIVISIONS & PLANNED GRIDS:
+   - For planned residential developments, trace EVERY internal dividing street and access road between plots, not just the outer perimeter.
+4. ASPHALT CENTERLINE ACCURACY:
+   - Trace strictly along the middle of the roadbed. Do NOT snap to sidewalk curbs, edges, or drainage ditches.
+5. COORDINATE FORMAT:
    - Return ordered integer coordinates in normalized [y, x] space (0-1000 scale)."""
 
 ImageLike = Union[str, bytes, np.ndarray, Image.Image, SatelliteImage]
@@ -201,7 +203,7 @@ def _extend_endpoints(line: LineString, dist: float) -> LineString:
 
 
 def sanitize_road_network(
-    road_lines, snap_tolerance: float = 12.0
+    road_lines, snap_tolerance: float = 9.0
 ):
     """Close small gaps at junctions before handing roads to Stage 4.
 
@@ -213,7 +215,9 @@ def sanitize_road_network(
     Args:
         road_lines: Extracted road ``LineString`` objects in pixel space
             (a single geometry, a ``MultiLineString``, a list, or ``None``).
-        snap_tolerance: Maximum snapping distance in pixels (default 12.0).
+        snap_tolerance: Maximum snapping distance in pixels (default 9.0 —
+            just enough to seal touching gaps without coercing two offset
+            staggered T-junctions into a fake 4-way crossing).
 
     Returns:
         List of snapped/merged ``LineString`` objects ready for Stage 4

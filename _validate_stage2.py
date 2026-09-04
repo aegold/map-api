@@ -40,14 +40,17 @@ def expect_raises(fn):
 
 report("prompt embedded verbatim", ROAD_EXTRACTION_PROMPT.startswith(
     "ROLE & OBJECTIVE:") and "TÂM ĐƯỜNG" in ROAD_EXTRACTION_PROMPT)
-report("prompt: residential-grid + precise-asphalt directives",
+report("prompt: staggered T-junctions + asphalt centerline directives",
        all(k in ROAD_EXTRACTION_PROMPT for k in (
            "Photogrammetry Engineer", "planned residential grids",
+           "village alleys", "PRESERVE STAGGERED T-JUNCTIONS",
+           "NO FAKE 4-WAY CROSSINGS", "residential yards/houses",
+           "house gate, yard, or dead end",
+           "PRESERVE MAIN THOROUGHFARE CONTINUITY",
            "RESIDENTIAL SUBDIVISIONS & PLANNED GRIDS",
-           "EVERY internal dividing street", "not just the perimeter road",
-           "PRECISE ASPHALT CENTERLINE", "sidewalk curbs",
-           "drainage ditches", "EXHAUSTIVE RECALL", "canal walkways",
-           "touch the main arterial line", "[y, x]")))
+           "EVERY internal dividing street",
+           "ASPHALT CENTERLINE ACCURACY", "sidewalk curbs",
+           "drainage ditches", "[y, x]")))
 
 # ------------------------------------------------- input normalization -----
 W, H = 800, 600

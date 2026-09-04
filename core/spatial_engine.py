@@ -325,7 +325,10 @@ def process_topology(
         filtering).
     """
     # --- Union per layer + tile-seam healing (morphological closing) -----------
-    merged_water = close_tile_seams(list(raw_water), buffer_dist=2.0)
+    # Water gets a gentle 0.5px closing to preserve natural pond/lake edges
+    # (2.0px would mechanically flatten organic shorelines at tile borders);
+    # trees/agri keep the full 2.0px healing for tile-stitch artifacts.
+    merged_water = close_tile_seams(list(raw_water), buffer_dist=0.5)
     merged_trees = close_tile_seams(list(raw_trees), buffer_dist=2.0)
     merged_agri = close_tile_seams(list(raw_agri), buffer_dist=2.0)
 

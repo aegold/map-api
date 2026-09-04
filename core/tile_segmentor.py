@@ -44,6 +44,7 @@ You are an expert Remote Sensing Semantic Segmentation Engine. Extract 3 core sp
 3. 'agricultural_zones' (STRICT CULTIVATED LAND ONLY):
    - Only active farmed fields showing human cultivation patterns (bunds, furrows, terraces, paddies).
    - EXCLUDE bare pasture hillsides, uncultivated wild grassland, residential houses, concrete yards, and roads.
+   - EXCLUDE leveled or graded sand-colored subdivision plots (new development sites) — bare construction soil is NOT agricultural land.
 
 OUTPUT FORMAT:
 Return dense vertex sequences (20-45 points per polygon) in normalized [y, x] space (0-1000 scale)."""

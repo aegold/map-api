@@ -261,7 +261,7 @@ report("smooth_polygon_robust: degenerate (tiny) returned unchanged",
 # --- Junction endpoint extension (branch-to-main gap repair) ---------------
 from core.path_extractor import _extend_endpoints, sanitize_road_network as _srx
 
-# 20px gap: beyond plain snap(12) but bridged by 12px endpoint extension.
+# 20px gap: beyond plain snap(9) but bridged by 9px endpoint extension.
 gap_a = _LS([(0, 500), (494, 500)])
 gap_b = _LS([(506, 500), (1000, 500)])
 fused = _srx([gap_a, gap_b])
@@ -274,9 +274,9 @@ far2 = _LS([(560, 500), (1000, 500)])
 still2 = _srx([far1, far2])
 report("junction: 100px gap stays separate", len(still2) == 2)
 
-ext_line = _extend_endpoints(_LS([(100, 100), (200, 100)]), 12.0)
-report("_extend_endpoints grows line by 12px on each side",
-       abs(ext_line.length - 124.0) < 0.01, f"len={ext_line.length}")
+ext_line = _extend_endpoints(_LS([(100, 100), (200, 100)]), 9.0)
+report("_extend_endpoints grows line by 9px on each side",
+       abs(ext_line.length - 118.0) < 0.01, f"len={ext_line.length}")
 
 # --- Tile seam healing (morphological closing @ 2.0px) ---------------------
 from core.spatial_engine import close_tile_seams
@@ -293,6 +293,20 @@ report("close_tile_seams: 40px gap stays separate",
 
 report("close_tile_seams: empty/invalid input -> empty Polygon",
        close_tile_seams([]).is_empty and close_tile_seams([None]).is_empty)
+
+# Water edge preservation: gentle 0.5px closing keeps natural shoreline
+# perimeter much closer to the original than aggressive 2.0px closing.
+from core.spatial_engine import close_tile_seams as _cts
+
+from shapely.geometry import Point as _Pt
+_water_circle = _Pt(500, 500).buffer(150)
+_gentle = extract_clean_polygons(_cts([_water_circle], buffer_dist=0.5))[0]
+_aggressive = extract_clean_polygons(_cts([_water_circle], buffer_dist=2.0))[0]
+report("water edge: 0.5px closing preserves shoreline vs 2.0px",
+       abs(_gentle.area - _water_circle.area) < abs(
+           _aggressive.area - _water_circle.area),
+       f"gentle_d={abs(_gentle.area - _water_circle.area):.0f}, "
+       f"aggr_d={abs(_aggressive.area - _water_circle.area):.0f}")
 
 # Tightened B-Spline (s=0.5): S-curve hugs original waypoints closely
 s_pts = [[0, 300], [150, 300], [300, 260], [450, 340], [600, 300]]

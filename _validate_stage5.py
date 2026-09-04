@@ -157,16 +157,17 @@ from core.path_extractor import ROAD_EXTRACTION_PROMPT as P2_PROMPT
 from core.tile_segmentor import TILE_SEGMENTATION_PROMPT as P3_PROMPT
 
 report(
-    "S2 prompt: residential grids, precise asphalt centerline, recall",
+    "S2 prompt: staggered T-junctions, asphalt centerline, subdivisions",
     P2_PROMPT.startswith("ROLE & OBJECTIVE:")
     and "TÂM ĐƯỜNG" in P2_PROMPT
     and "Photogrammetry Engineer" in P2_PROMPT
+    and "PRESERVE STAGGERED T-JUNCTIONS" in P2_PROMPT
+    and "NO FAKE 4-WAY CROSSINGS" in P2_PROMPT
+    and "house gate, yard, or dead end" in P2_PROMPT
+    and "PRESERVE MAIN THOROUGHFARE CONTINUITY" in P2_PROMPT
     and "RESIDENTIAL SUBDIVISIONS & PLANNED GRIDS" in P2_PROMPT
-    and "EVERY internal dividing street" in P2_PROMPT
-    and "PRECISE ASPHALT CENTERLINE" in P2_PROMPT
-    and "sidewalk curbs" in P2_PROMPT
-    and "drainage ditches" in P2_PROMPT
-    and "EXHAUSTIVE RECALL" in P2_PROMPT,
+    and "ASPHALT CENTERLINE ACCURACY" in P2_PROMPT
+    and "sidewalk curbs" in P2_PROMPT,
 )
 report(
     "S2 prompt: [y, x] integer 0-1000 grounding directive",
@@ -194,6 +195,11 @@ report(
     and "uncultivated wild grassland" in P3_PROMPT
     and "concrete yards" in P3_PROMPT
     and "roads" in P3_PROMPT,
+)
+report(
+    "S3 prompt: subdivision sand-soil exclusion (no false agri on P8)",
+    "leveled or graded sand-colored subdivision plots" in P3_PROMPT
+    and "NOT agricultural land" in P3_PROMPT,
 )
 report(
     "S3 prompt: [y, x] integer 0-1000 grounding directive",
